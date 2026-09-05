@@ -1,9 +1,16 @@
 import asyncio
+import sys
+from pathlib import Path
+
+# Decky spawns the backend as `python main.py` from the plugin dir; make sure the
+# bundled py_modules tree is importable regardless of the working dir / PYTHONPATH.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "py_modules"))
 
 from pocknix_control.config import build_config
 from pocknix_control.configio import apply_config, config_dir, export_config, read_config
 from pocknix_control.led import restore_led, set_led, set_led_enabled, set_led_linked, set_led_sides
 from pocknix_control.modes import set_fan_mode, set_lavd_mode
+from pocknix_control.oled_care import oled_care_status, run_refresher
 from pocknix_control.sdcard import detect_sdcard, format_sdcard
 from pocknix_control.snapshots import reboot_system, snapshot_status, start_rollback
 from pocknix_control.tweaks import save_tweaks
@@ -61,6 +68,13 @@ class Plugin:
 
     async def set_led_sides(self, sides):
         return await asyncio.to_thread(set_led_sides, sides)
+
+    async def oled_care_status(self):
+        return await asyncio.to_thread(oled_care_status)
+
+    async def run_oled_refresher(self, duration=None, passes=None):
+        print(f"[pocknix] run_oled_refresher called duration={duration} passes={passes}", flush=True)
+        return await asyncio.to_thread(run_refresher, duration, passes)
 
     async def check_updates(self):
         return await asyncio.to_thread(check_updates)

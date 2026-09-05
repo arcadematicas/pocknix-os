@@ -25,3 +25,10 @@
 .DS_Store
 *.swp
 __pycache__/
+
+# build artifacts (kernel Image, ramdisk) that must never be committed
+/out/
+
+# editor/backup cruft
+*.bak
+*.bak.*

@@ -160,8 +160,15 @@ EOF
   # ~1.3 GB tree). The chown above (root -> deck) is what gives deck ownership of it. Guard: the
   # bake is mandatory (the on-device launcher has no network fallback), so a missing tree means a
   # broken/stale rootfs — fail rather than ship a Steam session that hard-fails on first launch.
-  [ -x "${root}/home/deck/.local/share/Steam/steamrtarm64/steam" ] \
-    || die "Steam client not pre-extracted in the rootfs (/home/deck/.local/share/Steam) — run 'sudo make build' first."
+  if [ "${SOC}" = "sm8750" ]; then
+    # SM8750: gaming packages (Steam) not built yet — this is a DISPLAY/WAKE test
+    # image. Warning only, don't block the build.
+    [ -x "${root}/home/deck/.local/share/Steam/steamrtarm64/steam" ] \
+      || warn "Steam client not pre-extracted — gaming packages not built for SM8750 yet (ALARM defaults only)"
+  else
+    [ -x "${root}/home/deck/.local/share/Steam/steamrtarm64/steam" ] \
+      || die "Steam client not pre-extracted in the rootfs (/home/deck/.local/share/Steam) — run 'sudo make build' first."
+  fi
 
   # PipeWire/WirePlumber for deck's session (global-enable so its --user units start on login).
   chroot "${root}" systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true

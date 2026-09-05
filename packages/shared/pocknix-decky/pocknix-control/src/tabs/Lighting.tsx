@@ -1,6 +1,7 @@
-import { PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
+import { ButtonItem, Field, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import type { Dispatch, SetStateAction } from "react";
-import { setLed, setLedEnabled, setLedLinked, setLedSides } from "../backend";
+import { useState } from "react";
+import { runOledRefresher, setLed, setLedEnabled, setLedLinked, setLedSides } from "../backend";
 import { ColorControls } from "../components/ColorControls";
 import { hsvToRgb, rgbToHsv } from "../lib/rgb";
 import type { Config, LedSide, LedSideKey } from "../types";
@@ -26,10 +27,18 @@ export function Lighting({ config, setConfig, reload }: {
   const led = config.led;
   const leftHsv = sideHsv(led.left);
   const rightHsv = sideHsv(led.right);
+  const [refresherMsg, setRefresherMsg] = useState<string | null>(null);
 
   const commitLeft = (hsv: [number, number, number], brightness: number) => commit("left", hsv, brightness, setConfig, reload);
   const commitRight = (hsv: [number, number, number], brightness: number) => commit("right", hsv, brightness, setConfig, reload);
   const commitBoth = (hsv: [number, number, number], brightness: number) => commit("both", hsv, brightness, setConfig, reload);
+
+  const runRefresher = () => {
+    setRefresherMsg("Refreshing pixels…");
+    runOledRefresher()
+      .then((status) => setRefresherMsg(status.running ? "Pixel refresh in progress (~9s)." : "Pixel refresh finished."))
+      .catch((error) => setRefresherMsg(String(error)));
+  };
 
   return (
     <>
@@ -91,6 +100,23 @@ export function Lighting({ config, setConfig, reload }: {
           </>
         )
       )}
+
+      <PanelSection title="OLED CARE">
+        <PanelSectionRow>
+          <ButtonItem
+            layout="below"
+            description="Run the anti image-retention pixel refresh (fullscreen noise, ~9s)."
+            onClick={runRefresher}
+          >
+            Run Pixel Refresher
+          </ButtonItem>
+        </PanelSectionRow>
+        {refresherMsg ? (
+          <PanelSectionRow>
+            <Field label="" description={refresherMsg} />
+          </PanelSectionRow>
+        ) : null}
+      </PanelSection>
     </>
   );
 }

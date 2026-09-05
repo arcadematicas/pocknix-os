@@ -9,6 +9,8 @@ from .system import atomically_write
 # persisted here and re-applied from Plugin._main on load. Same multi_intensity/brightness
 # ABI on both node layouts: RP6/RP5/Flip 2 name four ring segments per stick as
 # rgb:l1..l4 / rgb:r1..r4, Odin 2 names one node per stick (left-joystick, right-joystick).
+# AYN Odin 3 names ONE node per channel per segment: l:r1..4 / l:g1..4 / l:b1..4 (left)
+# and r:r1..4 / r:g1..4 / r:b1..4 (right) — each a single-color LED class device.
 LED_CONFIG = Path("/etc/pocknix/led.json")
 LED_CLASS_DIR = Path("/sys/class/leds")
 
@@ -18,9 +20,15 @@ _LOCK = threading.Lock()
 
 def _segments(side):
     # Probed per call, not at import: plugin load can precede the LED driver.
+    # Odin 3: single-channel red node per segment (l:r1..4 / r:r1..4).
+    segs = sorted(LED_CLASS_DIR.glob(f"{side[0]}:r[0-9]*"))
+    if segs:
+        return segs
+    # Generic multicolor: rgb:l1..4 / rgb:r1..4.
     segs = sorted(LED_CLASS_DIR.glob(f"rgb:{side[0]}[0-9]*"))
     if segs:
         return segs
+    # Odin 2: one node per stick.
     node = LED_CLASS_DIR / f"{side}-joystick"
     return [node] if node.is_dir() else []
 
@@ -89,9 +97,27 @@ def _save(data):
     atomically_write(LED_CONFIG, json.dumps(data, indent=2, sort_keys=True) + "\n", 0o644)
 
 
+def _is_odin3_trio(led):
+    # Odin 3: node named <side>:r<N> with a sibling <side>:g<N>.
+    name = led.name
+    return (name.startswith("l:r") or name.startswith("r:r")) and (led.parent / name.replace(":r", ":g")).exists()
+
+
 def _write_segment(led, rgb, brightness):
-    # multi_intensity is laid out in the channel order named by multi_index, which
-    # isn't always R G B (the Retroid Pocket 6 is blue green red).
+    # Odin 3 single-channel trio: led is the RED node, siblings are g/b. Scale each
+    # channel by brightness manually (there is no kernel-side brightness scaling here).
+    if _is_odin3_trio(led):
+        g = led.parent / led.name.replace(":r", ":g")
+        b = led.parent / led.name.replace(":r", ":b")
+        for node, val in ((led, rgb[0]), (g, rgb[1]), (b, rgb[2])):
+            scaled = val * brightness // 255
+            try:
+                (node / "brightness").write_text(f"{scaled}\n", encoding="utf-8")
+            except OSError:
+                pass
+        return
+    # Generic multicolor node: multi_intensity is laid out in the channel order named
+    # by multi_index, which isn't always R G B (the Retroid Pocket 6 is blue green red).
     try:
         names = (led / "multi_index").read_text(encoding="utf-8").split()
     except OSError:
@@ -103,16 +129,16 @@ def _write_segment(led, rgb, brightness):
     except (OSError, ValueError):
         max_brightness = 255
     value = max(0, min(max_brightness, brightness))
-    (led / "multi_intensity").write_text(intensity + "\n", encoding="utf-8")
-    (led / "brightness").write_text(f"{value}\n", encoding="utf-8")
+    try:
+        (led / "multi_intensity").write_text(intensity + "\n", encoding="utf-8")
+        (led / "brightness").write_text(f"{value}\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _apply_side(segments, rgb, brightness):
     for led in segments:
-        try:
-            _write_segment(led, rgb, brightness)
-        except OSError:
-            pass
+        _write_segment(led, rgb, brightness)
 
 
 def _apply_config(data):

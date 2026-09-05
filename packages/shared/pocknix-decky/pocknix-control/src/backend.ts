@@ -1,5 +1,5 @@
 import { call } from "@decky/api";
-import type { Config, ConfigExportResult, ConfigImportResult, ConfigPreview, LedConfig, LedSideKey, SdcardInfo, SnapshotStatus, Tweaks, UpdateInfo, UpdateStatus } from "./types";
+import type { Config, ConfigExportResult, ConfigImportResult, ConfigPreview, LedConfig, LedSideKey, OledCareStatus, SdcardInfo, SnapshotStatus, Tweaks, UpdateInfo, UpdateStatus } from "./types";
 
 export const getConfig = () => call<[], Config>("get_config");
 export const setFanMode = (mode: string) => call<[string], Config>("set_fan_mode", mode);
@@ -16,6 +16,8 @@ export const setLed = (side: LedSideKey, r: number, g: number, b: number, bright
 export const setLedLinked = (linked: boolean) => call<[boolean], LedConfig>("set_led_linked", linked);
 export const setLedEnabled = (enabled: boolean) => call<[boolean], LedConfig>("set_led_enabled", enabled);
 export const setLedSides = (sides: boolean) => call<[boolean], LedConfig>("set_led_sides", sides);
+export const oledCareStatus = () => call<[], OledCareStatus>("oled_care_status");
+export const runOledRefresher = (duration?: number, passes?: number) => call<[number | undefined, number | undefined], OledCareStatus>("run_oled_refresher", duration, passes);
 export const detectSdcard = () => call<[], SdcardInfo>("detect_sdcard");
 export const formatSdcard = (label: string) => call<[string], SdcardInfo>("format_sdcard", label);
 export const checkUpdates = () => call<[], UpdateInfo[]>("check_updates");

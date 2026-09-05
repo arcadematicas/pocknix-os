@@ -137,3 +137,10 @@ export interface LedConfig {
   left: LedSide;
   right: LedSide;
 }
+
+export interface OledCareStatus {
+  available: boolean;
+  running: boolean;
+  defaultDuration: number;
+  defaultPasses: number;
+}

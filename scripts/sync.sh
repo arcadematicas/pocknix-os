@@ -37,7 +37,7 @@ mkdir -p "${KERNEL_DIR}/patches/10-mainline" \
          "${KERNEL_DIR}/patches/30-version" \
          "${KERNEL_DIR}/dts" "${KERNEL_DIR}/config" "${KERNEL_DIR}/bootloader"
 # generic ROCKNIX backports applied BEFORE device patches
-rsync -a --delete "${ROCKNIX_PROJECT_DIR}/packages/linux/patches/mainline/" "${KERNEL_DIR}/patches/10-mainline/"
+rsync -a --delete "${ROCKNIX_PROJECT_DIR}/packages/linux/patches/default/" "${KERNEL_DIR}/patches/10-mainline/"
 # the SoC device patches
 rsync -a --delete "${ROCKNIX_DEVICE_DIR}/patches/linux/"                     "${KERNEL_DIR}/patches/20-${SOC}/"
 # generic version-specific patches applied AFTER device patches (dir name set in

@@ -36,6 +36,7 @@ const setLed = (side, r, g, b, brightness) => call("set_led", side, r, g, b, bri
 const setLedLinked = (linked) => call("set_led_linked", linked);
 const setLedEnabled = (enabled) => call("set_led_enabled", enabled);
 const setLedSides = (sides) => call("set_led_sides", sides);
+const runOledRefresher = (duration, passes) => call("run_oled_refresher", duration, passes);
 const detectSdcard = () => call("detect_sdcard");
 const formatSdcard = (label) => call("format_sdcard", label);
 const checkUpdates = () => call("check_updates");
@@ -84,9 +85,8 @@ function useDebouncedSave(options) {
         const timer = window.setTimeout(() => flushRef.current(), delay);
         return () => window.clearTimeout(timer);
     }, [value]);
-    // QAM panels unmount the moment the menu closes. The cleanup above clears the only
-    // pending timer, so without this unmount flush any edit made <delay ms before closing
-    // was silently dropped (how the first on-device Audio Buffer edit got lost, 2026-07-05).
+    // QAM panels unmount the moment the menu closes, and the cleanup above clears the only
+    // pending timer: without this flush, any edit made <delay ms before closing is dropped.
     SP_REACT.useEffect(() => () => void flushRef.current(), []);
 }
 
@@ -106,9 +106,8 @@ function gameDisplayName(game) {
         return "";
     return game.name || `App ${game.appid}`;
 }
-// The backend lists every appmanifest in steamapps, which includes tools (Proton, Steam Linux
-// Runtime, Steamworks Common Redistributables, …). Steam's own appStore overview knows the type
-// (app_type 1 = game, 4 = tool); fall back to name patterns when the overview isn't available.
+// The backend lists every appmanifest in steamapps, tools included. app_type 4 = tool in
+// Steam's appStore overview; this name pattern is the fallback when no overview exists.
 const NON_GAME_NAME = /^(Proton[ 0-9]|Proton (Hotfix|EasyAntiCheat|BattlEye)|Steam Linux Runtime|Steamworks Common)/i;
 function isGame(appid, name) {
     try {
@@ -120,9 +119,8 @@ function isGame(appid, name) {
     }
     return !NON_GAME_NAME.test(name);
 }
-// Non-Steam shortcuts have no appmanifest, so the backend scan can't see them; Steam's
-// deckDesktopApps collection holds their appids (unsigned; force with >>> in case a build
-// hands out the signed-int32 form) and appStore resolves the names.
+// Non-Steam shortcuts have no appmanifest, so only deckDesktopApps sees them. Their appids are
+// unsigned and above 2^31, hence the >>> 0: some builds hand out the signed-int32 form.
 function nonSteamShortcuts() {
     try {
         const ids = window.collectionStore?.deckDesktopApps?.apps;
@@ -157,8 +155,8 @@ function availableGames(config) {
     for (const shortcut of nonSteamShortcuts()) {
         games.set(shortcut.appid, shortcut);
     }
-    // Games with saved tweaks stay listed even if the lookups above miss them —
-    // existing per-game config must remain reachable. Shortcut appids sit above 2^31.
+    // Saved tweaks keep a game listed even when the lookups above miss it, so existing
+    // per-game config can never become unreachable.
     for (const [appid, game] of Object.entries(config.tweaks?.games || {})) {
         if (game && typeof game === "object" && !games.has(String(appid))) {
             games.set(String(appid), { appid: String(appid), name: game.name || `App ${appid}`, nonSteam: Number(appid) >= 0x80000000 });
@@ -232,9 +230,8 @@ const styles = `
       }
     `;
 
-// Per-game Proton selection via SteamClient.Apps. This drives the SAME state as Steam's own
-// per-game compatibility dropdown (SpecifyCompatTool + app details), so the two UIs stay in
-// sync by construction — we never store a shadow copy.
+// Drives the same state as Steam's own per-game compatibility dropdown (SpecifyCompatTool +
+// app details), so never store a shadow copy: the two UIs stay in sync by construction.
 async function availableCompatTools(appid) {
     const apps = window.SteamClient?.Apps;
     if (!apps?.GetAvailableCompatTools)
@@ -625,9 +622,8 @@ function Games({ config, setConfig, reload }) {
                                 } }), SP_JSX.jsx(SelectEdit, { label: "Audio Buffer", value: audioValue, options: audioLatencyOptions, onChange: (id) => patchSettings({ audioLatency: id }) }), SP_JSX.jsx(EnvVarsButton, { value: String(values.envVars ?? ""), onSave: (next) => patchSettings({ envVars: next }) })] })) : (SP_JSX.jsx(TweakFields, { config: config, appid: game.appid, values: values, patch: patchSettings }))] })) : null, !editingDefault && perGameEnabled ? (SP_JSX.jsx(ConfigSection, { game: { appid: game.appid, name: game.name || "" }, reload: reload })) : null] }));
 }
 
-// Non-Steam shortcut creation via SteamClient.Apps. The Steam file browser can't open a
-// new window under the Plasma Mobile X11 session, so Decky's in-UI file picker plus this
-// module replace the stock "Add a Non-Steam Game" flow.
+// Replaces the stock "Add a Non-Steam Game" flow: Steam's file browser cannot open a new
+// window under the Plasma Mobile X11 session, so Decky's in-UI picker feeds this instead.
 const WINDOWS_EXE = /\.(exe|bat|msi)$/i;
 // Constant internal name from proton-cachyos' compatibilitytool.vdf; survives version bumps.
 const PROTON_TOOL = "proton-cachyos";
@@ -764,7 +760,6 @@ function ColorControls({ zone, hsv, brightness, onCommit }) {
       ` })] }));
 }
 
-// HSV <-> RGB conversion for the stick-light color picker.
 function hsvToRgb(h, s, v) {
     const hh = ((h % 360) + 360) % 360;
     const ss = Math.max(0, Math.min(100, s)) / 100;
@@ -826,16 +821,23 @@ function Lighting({ config, setConfig, reload }) {
     const led = config.led;
     const leftHsv = sideHsv(led.left);
     const rightHsv = sideHsv(led.right);
+    const [refresherMsg, setRefresherMsg] = SP_REACT.useState(null);
     const commitLeft = (hsv, brightness) => commit("left", hsv, brightness, setConfig, reload);
     const commitRight = (hsv, brightness) => commit("right", hsv, brightness, setConfig, reload);
     const commitBoth = (hsv, brightness) => commit("both", hsv, brightness, setConfig, reload);
+    const runRefresher = () => {
+        setRefresherMsg("Refreshing pixels…");
+        runOledRefresher()
+            .then((status) => setRefresherMsg(status.running ? "Pixel refresh in progress (~9s)." : "Pixel refresh finished."))
+            .catch((error) => setRefresherMsg(String(error)));
+    };
     return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "STICK LIGHTS", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Enable", checked: led.enabled, onChange: (value) => setLedEnabled(value)
                                 .then((next) => setConfig((cur) => (cur ? { ...cur, led: next } : cur)))
                                 .catch(() => reload()) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Link Left & Right", description: "Match both sticks to the same color.", checked: led.linked, disabled: !led.enabled, onChange: (value) => setLedLinked(value)
                                 .then((next) => setConfig((cur) => (cur ? { ...cur, led: next } : cur)))
                                 .catch(() => reload()) }) }), led.sidesAvailable && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Side Lights", description: "Match the side lighting to the sticks.", checked: led.sides, disabled: !led.enabled, onChange: (value) => setLedSides(value)
                                 .then((next) => setConfig((cur) => (cur ? { ...cur, led: next } : cur)))
-                                .catch(() => reload()) }) }))] }), led.enabled && (led.linked ? (SP_JSX.jsx(DFL.PanelSection, { title: "BOTH STICKS", children: SP_JSX.jsx(ColorControls, { zone: "both", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitBoth }) })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSection, { title: "LEFT STICK", children: SP_JSX.jsx(ColorControls, { zone: "left", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitLeft }) }), SP_JSX.jsx(DFL.PanelSection, { title: "RIGHT STICK", children: SP_JSX.jsx(ColorControls, { zone: "right", hsv: rightHsv, brightness: led.right.brightness, onCommit: commitRight }) })] })))] }));
+                                .catch(() => reload()) }) }))] }), led.enabled && (led.linked ? (SP_JSX.jsx(DFL.PanelSection, { title: "BOTH STICKS", children: SP_JSX.jsx(ColorControls, { zone: "both", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitBoth }) })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSection, { title: "LEFT STICK", children: SP_JSX.jsx(ColorControls, { zone: "left", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitLeft }) }), SP_JSX.jsx(DFL.PanelSection, { title: "RIGHT STICK", children: SP_JSX.jsx(ColorControls, { zone: "right", hsv: rightHsv, brightness: led.right.brightness, onCommit: commitRight }) })] }))), SP_JSX.jsxs(DFL.PanelSection, { title: "OLED CARE", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", description: "Run the anti image-retention pixel refresh (fullscreen noise, ~9s).", onClick: runRefresher, children: "Run Pixel Refresher" }) }), refresherMsg ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "", description: refresherMsg }) })) : null] })] }));
 }
 
 function cardSummary(card) {
@@ -849,9 +851,8 @@ function cardSummary(card) {
     const state = card.fstype === "ext4" ? (card.mountpoint ? "mounted" : "") : "not formatted for Steam";
     return [card.label || "unlabeled", size, card.fstype || "no filesystem", state].filter(Boolean).join(" · ");
 }
-// showModal injects closeModal into this wrapper. We deliberately do NOT forward it to
-// ConfirmModal: its internal OK handler would close the dialog immediately, and we want
-// it held open (with the confirm button greyed out) until the format finishes.
+// closeModal must not be forwarded to ConfirmModal: its OK handler would close the dialog
+// at once, and it has to stay open until the format finishes.
 function FormatConfirmModal({ summary, onConfirm, closeModal }) {
     const [text, setText] = SP_REACT.useState("");
     const [running, setRunning] = SP_REACT.useState(false);
@@ -1144,12 +1145,10 @@ function GameSettingsModal({ appid, name, closeModal }) {
                 } }), enabled ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(PerfFields, { values: values, patch: patch }), SP_JSX.jsx(TweakFields, { config: config, appid: appid, values: values, patch: patch }), SP_JSX.jsx(ConfigSection, { game: { appid, name }, reload: () => getConfig().then(setConfig).catch(() => { }) })] })) : null] }));
 }
 
-// Adds "Pocknix Settings" to the library entry context menu (the Start-button menu).
-// The menu class is no longer a module export: locate its module by the
-// "().LibraryContextMenu" classname marker, take the wrapper member (the one injecting
-// `navigator:` via the jsx runtime), and fake-render it — the element's type is the real
-// class. Steam UI internals are unversioned, so every step is guarded: if the shape
-// changes we lose the menu item, never the plugin.
+// LibraryContextMenu is not a module export, so it is reached by classname marker ->
+// `navigator:` wrapper -> fake-render, whose element type is the real class.
+// Steam UI internals are unversioned: every step is guarded so a shape change costs the
+// menu item, never the plugin.
 function patchLibraryContextMenu() {
     try {
         const menuModule = DFL.findModuleChild((mod) => {
@@ -1179,9 +1178,7 @@ function patchLibraryContextMenu() {
         const LibraryContextMenu = DFL.fakeRenderComponent(wrapper)?.type;
         if (!LibraryContextMenu?.prototype?.BuildManageSubmenu)
             return () => { };
-        // Patch the Manage submenu builder rather than the top-level render, so the entry
-        // lands under Manage. The builder's return shape is guarded both ways (plain item
-        // array vs element with children).
+        // The builder returns either a plain item array or an element with children.
         const patch = DFL.afterPatch(LibraryContextMenu.prototype, "BuildManageSubmenu", function (_args, ret) {
             try {
                 const overview = this.props?.overview;
