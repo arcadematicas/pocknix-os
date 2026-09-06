@@ -35,7 +35,7 @@ As any Arch user knows, rolling updates can mean unexpected breakage, so staying
 | AYN Odin 2 Portal | SM8550 | ✅ Supported |
 | AYN Odin 2 Mini | SM8550 | ✅ Supported |
 | AYN Thor | SM8550 | 📋 Planned |
-| Retroid Pocket Nova | SM8550 (QCS8550) | 📋 Planned |
+| Retroid Pocket Nova | SM8550 | 🧪 Beta |
 | AYN Odin 3 | SM8750 | 📋 Planned |
 
 ## How to install

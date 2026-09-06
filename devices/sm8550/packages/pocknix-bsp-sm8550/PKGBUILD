@@ -1,11 +1,11 @@
-# pocknix-bsp-sm8550 — board support for the SM8550 FAMILY (RP6 +TOP-DPAD, Odin 2 / Mini /
+# pocknix-bsp-sm8550 — board support for the SM8550 FAMILY (RP6 +TOP-DPAD, Nova, Odin 2 / Mini /
 # Portal, Thor). One package per SoC: board facts in /usr/lib/pocknix/boards/<board>.conf,
 # device.conf is a sourced dispatcher keyed on the DT model, InputPlumber configs are
 # dt-model gated.
 pkgname=pocknix-bsp-sm8550
 pkgver=0.2.0
-pkgrel=9
-pkgdesc="pocknix board support: SM8550 family (RP6, Odin 2 family, Thor) — runtime board dispatch, input maps, suspend quirks, audio UCM, dual-screen touch policy"
+pkgrel=10
+pkgdesc="pocknix board support: SM8550 family (RP6, Nova, Odin 2 family, Thor) — runtime board dispatch, input maps, suspend quirks, audio UCM, dual-screen touch policy"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
 license=('GPL2')

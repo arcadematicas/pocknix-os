@@ -98,6 +98,18 @@ Sourced by shared session scripts (`pocknix-steam`, `pocknix-desktop-rotate`,
 | `POCKNIX_INTERNAL_DISK` | pocknix-install/uninstall-internal, installer-gui | internal disk (default /dev/sda) |
 | `POCKNIX_BOOT_GPT_NAME/_FAT_LABEL`, `POCKNIX_ROOT_LABEL` | pocknix-install/uninstall-internal | internal-install boot contract |
 
+Picking the display values for a new board:
+
+* `POCKNIX_PANEL_W/H` are the panel's NATIVE frame. `POCKNIX_PANEL_ORIENT` is `left`/`right`
+  for a portrait panel mounted landscape (the consumers transpose) and `normal` for a
+  landscape-native panel (no DT `rotation`): W/H pass through untransposed and
+  `POCKNIX_DESKTOP_ROTATE=none`.
+* `POCKNIX_PANEL_MM` stays `177x100` unless a tester says otherwise. It is a fake that sets
+  gamepadui's dpi (`W * 25.4 / 177`), field-validated on 1920- and 1280-wide panels; deviate
+  only if the UI crops (dpi too high for the width) or reads tiny.
+* `POCKNIX_DESKTOP_SCALE` = the largest 0.25 step that keeps the logical short side >= 480
+  (the Plasma Mobile shell needs the height): 1080-line panels -> 2.5, 960-line -> 2.0.
+
 Every consumer falls back to the RP6 values when a key (or the whole file) is absent, so
 a missing/partial device.conf degrades to known-good behavior instead of breaking.
 (The `POCKNIX_BOOT_STYLE` gate exists precisely because those fallbacks would be wrong
@@ -108,7 +120,7 @@ on an arm-efi board's internal storage.)
 1. Confirm the board's dtb is in `kernel/<soc>/dts` (re-`make sync` if ROCKNIX added it)
    and note the DTS `model =` string — it keys everything at runtime.
 2. `boards/<board>.conf` in the family BSP (panel geometry/orientation from the DTS,
-   `POCKNIX_BIG_CORES` from the SoC topology) + a dispatcher case arm.
+   `POCKNIX_BIG_CORES` from the SoC topology); display values per the rule above + a dispatcher case arm.
 3. InputPlumber: extend the family yaml's `matches:` if the board shares the family
    controller, or add a new model-gated yaml + capability map if it differs.
 4. UCM if the sound card name differs; udev quirks as needed. arm-efi: add the board's
