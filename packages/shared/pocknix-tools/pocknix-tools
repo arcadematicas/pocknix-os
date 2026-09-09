@@ -141,7 +141,7 @@ do_share() {
     kdialog --title "$TITLE" --warningcontinuecancel \
       "File sharing needs Samba, which is not installed (7.4 MB download).\n\nInstall it now?" \
       || return 0
-    konsole_run "/usr/bin/pacman -S --needed --noconfirm samba"
+    konsole_run "/usr/bin/pocknix-share install"
     share_installed || { gui_err "Samba is still not installed. File sharing cannot start."; return 0; }
   fi
   kdialog --title "$TITLE" --warningcontinuecancel \

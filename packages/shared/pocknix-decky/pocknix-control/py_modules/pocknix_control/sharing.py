@@ -53,7 +53,7 @@ def install_samba():
     if not _install_lock.acquire(blocking=False):
         raise RuntimeError("An install is already running")
     try:
-        proc = _host(["/usr/bin/pacman", "-S", "--needed", "--noconfirm", "samba"], timeout=600)
+        proc = _host([SHARE, "install"], timeout=600)
         if proc is None or proc.returncode != 0:
             detail = ((proc.stderr if proc else "") or "").strip()[-200:]
             raise RuntimeError(f"Could not install Samba: {detail or 'timed out (slow mirror or no network?)'}")
