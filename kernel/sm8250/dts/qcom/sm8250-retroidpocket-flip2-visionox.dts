@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-/*
- * Retroid Pocket Flip 2, Visionox panel revision: the Flip 2 with the same
- * VTDR6130 panel swap as sm8250-retroidpocket-rp5-visionox.dts.
- */
+/* Retroid Pocket Flip 2 with the Visionox VTDR6130 panel; see the rp5-visionox dts. */
 
 /dts-v1/;
 
