@@ -258,12 +258,16 @@ configure() {
   # boot). Built-in they are unhealable (no bind attrs); as modules the BSP's
   # pocknix-sm8250-audio-heal service reloads whichever ones lost the race until
   # the sound card assembles.
+  # sm8250-only: the Visionox VTDR6130 COG panel driver (patch 0104, the RP6's) for the
+  # newer RP5 / Flip 2 revisions (patch 1022 + the -visionox dts). The synced sm8250
+  # config predates the symbol, so it is not in the base config.
   if [ "${SOC}" = "sm8250" ]; then
     "${KSRC}/scripts/config" --file "${KSRC}/.config" \
       --module SND_SOC_LPASS_WSA_MACRO \
       --module SND_SOC_LPASS_VA_MACRO \
       --module SND_SOC_LPASS_RX_MACRO \
-      --module SND_SOC_LPASS_TX_MACRO
+      --module SND_SOC_LPASS_TX_MACRO \
+      --enable DRM_PANEL_VISIONOX_VTDR6130_COG
   fi
 
   # olddefconfig auto-accepts defaults for any new symbols (no prompts, no stdin).
@@ -287,6 +291,15 @@ configure() {
   # mount its own root on snapshot-capable (btrfs) images.
   grep -q "^CONFIG_BTRFS_FS=y" "${KSRC}/.config" \
     || die "kernel config: CONFIG_BTRFS_FS did not resolve to =y (btrfs root would be unmountable — no initramfs)"
+
+  # Both Retroid panel drivers must be built in on sm8250: olddefconfig drops a symbol
+  # silently when its patch is missing, and the only symptom is a black screen on device.
+  if [ "${SOC}" = "sm8250" ]; then
+    for sym in DRM_PANEL_DDIC_CH13726A DRM_PANEL_VISIONOX_VTDR6130_COG; do
+      grep -q "^CONFIG_${sym}=y" "${KSRC}/.config" \
+        || die "kernel config: CONFIG_${sym} did not resolve to =y (panel patch missing from the sm8250 stack?)"
+    done
+  fi
 }
 
 build_kernel() {
