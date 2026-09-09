@@ -29,6 +29,11 @@ matches:
       attributes:
         - name: model
           value: Retroid Pocket 5
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: model
+          value: Retroid Pocket 5 Visionox
 
 single_source: false
 
