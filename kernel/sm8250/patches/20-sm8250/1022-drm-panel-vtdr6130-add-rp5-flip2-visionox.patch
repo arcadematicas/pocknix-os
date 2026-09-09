@@ -48,7 +48,7 @@ The new desc exposes only the 120Hz mode, like the RP6 on sm8550 (patch 1021).
  
  	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0xB1, 
  				0x02, 0x16, 0x00, 0x14, 0x00, 0x1C, 0x00, 0x02,
-@@ -249,8 +261,38 @@
+@@ -249,8 +261,35 @@
  		.bits_per_pixel = 8 << 4,
  		.block_pred_enable = true,
  	},
@@ -58,10 +58,7 @@ The new desc exposes only the 120Hz mode, like the RP6 on sm8550 (patch 1021).
  
 +static struct panel_desc vtdr6130_sm8250_desc = {
 +	.modes = vtdr6130_rp6_modes,
-+	/*
-+	 * 120Hz only, same reason as the RP6 (sm8550 patch 1021): init_sequence
-+	 * guesses the active mode at prepare() and races with two modes exposed.
-+	 */
++	/* 120Hz only: init_sequence guesses the mode at prepare(), two modes race (see sm8550 1021). */
 +	.num_modes = 1,
 +	.width_mm = 120,
 +	.height_mm = 68,

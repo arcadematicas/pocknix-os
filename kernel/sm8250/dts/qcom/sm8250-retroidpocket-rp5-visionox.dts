@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Retroid Pocket 5, Visionox panel revision. Newer units (2026 batches) ship a
- * Visionox VTDR6130 command-mode panel in place of the CH13726A; the board is
- * otherwise the RP5. Selected by the grub "visionox" marker (grub.cfg).
+ * Retroid Pocket 5 with the Visionox VTDR6130 panel (newer units); the CH13726A
+ * init leaves this panel dark. Picked by grub's "visionox" marker file.
  */
 
 /dts-v1/;

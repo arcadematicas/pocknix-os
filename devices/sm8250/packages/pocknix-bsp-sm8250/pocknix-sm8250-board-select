@@ -27,8 +27,7 @@ case "$content" in                            # longest token first (ROCKNIX ord
 esac
 [ -n "$want" ] || exit 0                      # unknown board fingerprint: leave defaults
 
-# The Visionox panel revision is a separate dtb per board (grub.cfg picks it from the
-# "visionox" marker file or an explicit saved_entry); keep that choice across the fix.
+# The -visionox dtb suffix is a panel choice, not a board fact: carry it across the fix.
 booted=""; suffix=""
 case "$model" in
   *" Visionox") suffix="-visionox"; model="${model% Visionox}" ;;
