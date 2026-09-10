@@ -1,25 +1,20 @@
 #!/bin/bash
-# pocknix-share — turn the SMB file share on/off. status stays unprivileged because the
-# menu polls it on every draw; on/off need root and arrive via pkexec (55-pocknix-share.rules).
+# pocknix-share - SMB share on/off. status stays unprivileged (the menu polls it every draw);
+# the rest arrives via pkexec under 55-pocknix-share.rules.
 set -euo pipefail
 
-# smb.service alone defines whether the share is on. avahi is a FOLLOWER: it rides along to
-# put the device in Finder's Network sidebar and answer pocknix.local, but it never decides
-# the state. Keying `on` to smbd is what keeps this in step with the Decky plugin, which
-# reads smb.service's enable symlink — consult avahi here and anything else that enables it
-# makes Tools report on while the QAM reports off, and `off` then tears avahi down under it.
+# smb.service alone defines the state; the Decky plugin reads its enable symlink, so consulting
+# avahi here would split the two UIs whenever something else enables avahi.
 SHARE_UNIT=smb.service
 UNITS=(smb.service avahi-daemon.service)
-# Socket units re-trigger their service on the next connection, and systemd warns about
-# exactly that when you disable the service alone, so they move together. smb.socket does
-# not exist in Arch's samba package; disabling it is harmless and survives it appearing.
+# Sockets move with their services or the next connection restarts them. smb.socket does not
+# exist in Arch's samba; listing it is harmless and survives it appearing.
 SOCKETS=(smb.socket avahi-daemon.socket)
 
 # guest_account in smb.conf; kept in sync by hand because smb.conf ships alongside this.
 SHARE_USER=deck
 
-# Samba is an opt-in extra (config/packages/base-extras.list), not part of any image:
-# 74.5 MB installed is too much to ship to devices that never share a file.
+# Samba is an opt-in base extra, not in any image (74.5 MB for devices that never share).
 is_installed() { command -v smbd >/dev/null 2>&1; }
 
 is_on() {
@@ -29,12 +24,9 @@ is_on() {
 
 need_root() { [ "$(id -u)" -eq 0 ] || { echo "pocknix-share: must run as root" >&2; exit 1; }; }
 
-# The share is guest-only, but the guest account still has to EXIST in passdb or every
-# write is denied: `guest account = deck` maps the session to unix deck, while the NT
-# token keeps the Guest SID, and the ACL synthesised from 0755 deck:deck grants write to
-# the owner SID alone — smbd refuses at smb2_create, before any unix permission check.
-# The password is random and immediately discarded: guest is the only intended way in,
-# so no one should ever be able to authenticate AS deck over SMB.
+# Guest-only, but deck must EXIST in passdb or every write is refused at smb2_create: the
+# guest token keeps the Guest SID and the synthesised ACL grants write to the owner SID only.
+# The password is random and discarded so nobody can authenticate AS deck over SMB.
 ensure_passdb() {
   pdbedit -L 2>/dev/null | cut -d: -f1 | grep -qx "${SHARE_USER}" && return 0
   local pw
@@ -65,19 +57,15 @@ case "${1:-status}" in
     ;;
   off)
     need_root
-    # Disable everything BEFORE stopping anything, then stop services before their
-    # sockets: a socket that outlives its service is one connection away from starting
-    # it again, which is what systemd warns about on stderr. Units go one at a time
-    # because systemctl aborts the whole call on the first unknown unit, and smb.socket
-    # does not exist in Arch's samba.
+    # Disable all first, then stop services before sockets, or a surviving socket restarts the
+    # service on the next connection. One unit per call: systemctl aborts on an unknown unit.
     for u in "${SOCKETS[@]}" "${UNITS[@]}"; do
       systemctl disable "${u}" >/dev/null 2>&1 || true
     done
     for u in "${UNITS[@]}" "${SOCKETS[@]}"; do
       systemctl stop "${u}" >/dev/null 2>&1 || true
     done
-    # a unit bounced by socket activation mid-teardown lands in failed; clear it so the
-    # next status read is honest
+    # a unit bounced mid-teardown lands in failed and would lie to the next status read
     systemctl reset-failed "${UNITS[@]}" >/dev/null 2>&1 || true
     echo "state=off"
     ;;

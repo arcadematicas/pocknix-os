@@ -1,7 +1,7 @@
 #!/bin/bash
-# pocknix-tools — kdialog front-end for the maintenance CLIs. Every privileged
-# step goes through pkexec; the polkit rules ship with the package that owns
-# each binary (pocknix-snapshots, pocknix-base, pocknix-bsp-common).
+# pocknix-tools - kdialog front-end for the maintenance CLIs. Every privileged step is a
+# pkexec of a program whose own package ships its polkit rule; never pkexec anything else
+# (the session has no polkit agent, see dev/desktop.md).
 set -euo pipefail
 
 TITLE="Pocknix Tools"
@@ -90,8 +90,7 @@ do_rollback() {
     gui_err "Rollback failed — nothing was changed:\n\n$(printf '%s' "${out}" | tail -4)"
     return 0
   fi
-  # set -euo pipefail: "Later" and a dismissed msgbox are answers, not failures —
-  # unguarded they would take the whole app down on a successful rollback.
+  # under set -e, "Later" and a dismissed msgbox would take the app down after a good rollback
   if [ -n "${flag}" ]; then
     kdialog --title "$TITLE" --msgbox "Internal install rolled back to snapshot ${id}.\nIt boots into that state next time you start from internal storage." || true
   elif kdialog --title "$TITLE" --yes-label "Reboot now" --no-label "Later" \
@@ -135,8 +134,7 @@ do_share() {
     kdialog --title "$TITLE" --msgbox "File sharing is off. The device no longer shares any folder." || true
     return 0
   fi
-  # 74.5 MB installed, so it is not in any image: offer the download before the warning,
-  # otherwise the user agrees to the trade and then hits a dead end.
+  # download before the warning, or the user agrees to the trade and hits a dead end
   if ! share_installed; then
     kdialog --title "$TITLE" --warningcontinuecancel \
       "File sharing needs Samba, which is not installed (7.4 MB download).\n\nInstall it now?" \
@@ -175,14 +173,12 @@ do_mode() {
   esac
 }
 
-# kdialog rich text mangles <table>, desyncs on tags inside a <pre> and glues inline text
-# preceding one, so the CLI's printf columns inside a single plain <pre> are the table.
+# kdialog rich text mangles <table> and tags inside <pre>: the CLI's printf columns are the table
 do_status() {
   local list
   list="$(pkexec /usr/bin/pocknix-rollback --list 2>/dev/null)" || list=""
   list="$(printf 'Snapshots (newest first)\n\n'; printf '%s\n' "${list}" | head -1; printf '%s\n' "${list}" | tail -n +2 | sort -r)"
-  # Rich text eats newlines and a wide pre defeats word-wrap, hence explicit <br>s and
-  # pre-folding; escape first, since the converge-blocked hint contains a literal <name>.
+  # rich text eats newlines and a wide <pre> defeats wrapping; escape first (a hint holds <name>)
   local status
   status="$(pocknix-base status 2>&1 \
     | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' \
@@ -193,8 +189,7 @@ do_status() {
 
 while :; do
   mode="$(base_mode)"
-  # kdialog returns the FIRST row when a tap never registered, so whatever leads this
-  # list is what a missed tap runs: keep the read-only one there.
+  # a missed tap returns the FIRST row: keep the read-only item there
   items=(status "Show system status")
   items+=(rollback "Roll back the last update...")
   internal_candidate && items+=(rollback-internal "Roll back the INTERNAL install...")

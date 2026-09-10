@@ -3,14 +3,11 @@ from pathlib import Path
 
 from .system import run_cmd
 
-# The toggle itself lives in pocknix-tools, so the desktop menu and this plugin drive one
-# implementation rather than two that can disagree.
+# one implementation for both UIs (pocknix-tools owns it)
 SHARE = "/usr/bin/pocknix-share"
 
-# Status is read straight off the filesystem, the way snapshots.py reads its own: this is
-# polled every few seconds while the panel is open, and the alternative is spawning a
-# transient unit per poll. `systemctl enable` creates exactly this symlink, and smb.service
-# declares PIDFile=/run/smbd.pid, so both are load-bearing rather than incidental.
+# Polled every few seconds, so status reads the filesystem instead of spawning a transient
+# unit per poll. The enable symlink and smb.service's PIDFile= are the contract.
 SMBD = Path("/usr/bin/smbd")
 ENABLED_LINK = Path("/etc/systemd/system/multi-user.target.wants/smb.service")
 SMBD_PID = Path("/run/smbd.pid")
@@ -20,11 +17,8 @@ _install_lock = threading.Lock()
 
 
 def _host(args, timeout):
-    # Everything that must run natively goes through systemd-run, for the reason updates.py
-    # documents: this python is an x86_64 FEX guest. /usr/bin/bash and /usr/bin/systemctl are
-    # SHADOWED by the FEX rootfs while pocknix-share, smbpasswd and pdbedit are not, so a
-    # direct call would run an aarch64 shell script under an x86 bash and then exec native
-    # binaries out of it. systemd-run hands the whole thing to PID 1 and sidesteps that.
+    # This python is an x86_64 FEX guest whose rootfs shadows bash and systemctl; a direct call
+    # would run the aarch64 script under an x86 bash. systemd-run hands it to PID 1 (updates.py).
     return run_cmd(
         ["systemd-run", "--quiet", "--collect", "--wait", "--pipe", *args],
         timeout=timeout,
@@ -40,8 +34,7 @@ def share_status():
 
 
 def set_share(on):
-    # The plugin already runs as root ("flags": ["root"]), so no pkexec here — unlike Pocknix
-    # Tools, which needs 55-pocknix-share.rules.
+    # plugin runs as root: no pkexec
     proc = _host([SHARE, "on" if on else "off"], timeout=90)
     if proc is None or proc.returncode != 0:
         detail = ((proc.stderr if proc else "") or "").strip()[-200:]
