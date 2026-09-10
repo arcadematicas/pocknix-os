@@ -2,8 +2,8 @@
 # which live here rather than in the image overlay so fixes reach fielded SDs on -Syu (#34).
 pkgname=pocknix-tools
 pkgver=0.1.0
-pkgrel=17
-pkgdesc="Pocknix maintenance app: snapshot rollback, base mode switch, internal install, SSH + file sharing toggles"
+pkgrel=18
+pkgdesc="Pocknix maintenance app: snapshot rollback, base mode switch, internal install, SSH + file sharing toggles, emulation layer"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
 license=('MIT')
@@ -13,9 +13,10 @@ source=('pocknix-tools' 'pocknix-tools.desktop' 'pocknix-installer-gui'
         'pocknix-install-internal' 'pocknix-uninstall-internal' '54-pocknix-installer.rules'
         'pocknix-internal-boot-rename' 'pocknix-internal-boot-rename.service'
         'pocknix-ssh' '53-pocknix-ssh.rules' '10-pocknix-no-root-login.conf'
-        'pocknix-share' '55-pocknix-share.rules' 'smb.conf' 'pocknix-smb.service')
+        'pocknix-share' '55-pocknix-share.rules' 'smb.conf' 'pocknix-smb.service'
+        'pocknix-layer' '56-pocknix-layer.rules')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 backup=('etc/ssh/sshd_config.d/10-pocknix-no-root-login.conf'
         'etc/samba/smb.conf')
 
@@ -48,4 +49,8 @@ package() {
   install -Dm644 "${srcdir}/smb.conf" "${pkgdir}/etc/samba/smb.conf"
   install -Dm644 "${srcdir}/pocknix-smb.service" \
     "${pkgdir}/etc/avahi/services/pocknix-smb.service"
+
+  install -Dm755 "${srcdir}/pocknix-layer" "${pkgdir}/usr/bin/pocknix-layer"
+  install -Dm644 "${srcdir}/56-pocknix-layer.rules" \
+    "${pkgdir}/usr/share/polkit-1/rules.d/56-pocknix-layer.rules"
 }

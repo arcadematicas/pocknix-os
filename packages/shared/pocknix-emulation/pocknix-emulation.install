@@ -1,0 +1,7 @@
+# Images before 0.1.0-15 enabled the user unit with `systemctl --global enable`, a link pacman
+# never owned. rm, not systemctl: this also runs in the image-build chroot.
+_drop_unowned_wants() {
+  rm -f /etc/systemd/user/default.target.wants/pocknix-roms-init.service
+}
+post_install() { _drop_unowned_wants; }
+post_upgrade() { _drop_unowned_wants; }

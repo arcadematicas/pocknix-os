@@ -72,16 +72,13 @@ install_local_packages() {
   # copy would never be upgraded by a meta install — so force ours here, loudly.
   chroot "${root}" pacman -S --noconfirm --needed \
     pocknix/mesa pocknix/vulkan-freedreno pocknix/gamescope pocknix/mangohud
-  # The layer metas: pocknix-core (mandatory) + all three optional layers (the
-  # image ships the full experience; #48 makes emulation optional behind a
-  # flag). Their unqualified depends resolve by repo order — [pocknix] and
-  # [pocknix-shared] sit ABOVE the base repos (append_local_repo), so pocknix
-  # names always resolve to our builds, ALARM names to ALARM/base.
-  chroot "${root}" pacman -S --noconfirm --needed \
-    pocknix-shared/pocknix-core \
-    pocknix-shared/pocknix-steam-full \
-    pocknix-shared/pocknix-desktop-full \
-    pocknix-shared/pocknix-emulation-full
+  # The layer metas (POCKNIX_EMULATION=0 omits emulation). Their unqualified depends
+  # resolve by repo order: [pocknix] + [pocknix-shared] sit ABOVE the base repos
+  # (append_local_repo), so pocknix names resolve to our builds, ALARM names to base.
+  local metas=(pocknix-core pocknix-steam-full pocknix-desktop-full)
+  if [ "${POCKNIX_EMULATION:-1}" = 1 ]; then metas+=(pocknix-emulation-full)
+  else log "POCKNIX_EMULATION=0 — image ships WITHOUT the emulation layer"; fi
+  chroot "${root}" pacman -S --noconfirm --needed "${metas[@]/#/pocknix-shared/}"
   # GUARD: these local builds MUST come from [pocknix], not silently fall back / go missing. gamescope
   # especially: ALARM's vanilla lacks --use-rotation-shader and black-screens on the RP6 (bitten 3x).
   local mesa_ver; mesa_ver="$(chroot "${root}" pacman -Q mesa 2>/dev/null | awk '{print $2}')"
@@ -109,7 +106,7 @@ install_local_packages() {
   # one just leaves that system out of ES-DE, which degrades gracefully) — don't
   # fail the whole image over 3DS/GameCube/WiiU.
   local oe
-  for oe in dolphin-emu azahar cemu; do
+  [ "${POCKNIX_EMULATION:-1}" = 1 ] && for oe in dolphin-emu azahar cemu; do
     chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
       || warn "optional emulator ${oe} not in [pocknix-shared] (build failed/skipped?) — image ships WITHOUT it"
   done

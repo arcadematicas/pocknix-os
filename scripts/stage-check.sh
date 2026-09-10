@@ -2,7 +2,8 @@
 # stage-check.sh — consistency gate on a staged repo, run by make stage
 # (re-run alone: make stage-check / stage-check-shared). Per SoC:
 #   resolve  every depends= of every staged package is satisfiable
-#   reach    every staged name is in a layer/device meta's closure (NEW names FAIL)
+#   reach    every staged name is in a layer/device meta's closure (NEW names FAIL);
+#            a hard dep in that closure nothing provides FAILs too
 #   rename   every DROP='d name is replaces='d by something still published
 #   version  a swapped package is strictly newer than the live one
 #   shadow   a per-SoC copy of a shared name is not older than [pocknix-shared]
@@ -206,20 +207,28 @@ check_resolve() {  # $1 soc
 declare -A reached   # name -> soc list it is reached on
 check_reach() {  # $1 soc: BFS over depends + optdepends from the roots
   UNIVERSE="$(universe_for "$1")"
-  local -A seen; local queue=() k spec n root
+  local -A seen; local queue=() k spec n root kind edges
   for root in "${ROOTS[@]}" "pocknix-device-$1"; do
     if first_copy "${root}"; then seen["${root}"]=1; queue+=("${FC}")
     else WARN "$1: root ${root} is not published anywhere in ${UNIVERSE// /, }"; fi
   done
   while [ "${#queue[@]}" -gt 0 ]; do
     k="${queue[0]}"; queue=("${queue[@]:1}")
-    while IFS= read -r spec; do
-      [ -n "${spec}" ] || continue
-      satisfier "${spec}" || continue
-      n="${SAT%@*}"
-      [ -n "${seen["${n}"]+x}" ] && continue
-      seen["${n}"]=1; first_copy "${n}" && queue+=("${FC}")
-    done <<< "${deps["${k}"]:-}${optd["${k}"]:-}"
+    for kind in D O; do
+      if [ "${kind}" = D ]; then edges="${deps["${k}"]:-}"; else edges="${optd["${k}"]:-}"; fi
+      while IFS= read -r spec; do
+        [ -n "${spec}" ] || continue
+        if ! satisfier "${spec}"; then
+          # a hard dep nothing provides = a member a failed build never published; base internals are ALARM's
+          [ "${kind}" = D ] && [ "${k#*@}" != base ] && \
+            FAIL "$1: ${k%@*} (${k#*@}) depends on '${spec}' — nothing in ${UNIVERSE// /, } provides it"
+          continue
+        fi
+        n="${SAT%@*}"
+        [ -n "${seen["${n}"]+x}" ] && continue
+        seen["${n}"]=1; first_copy "${n}" && queue+=("${FC}")
+      done <<< "${edges}"
+    done
   done
   for n in "${!seen[@]}"; do reached["${n}"]+="$1 "; done
 }
