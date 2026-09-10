@@ -5,7 +5,6 @@ InhibitScreensaver = true
 ConfirmShutdown = false
 StartPaused = false
 PauseOnFocusLoss = false
-StartFullscreen = false
 DoubleClickTogglesFullscreen = true
 HideMouseCursor = false
 RenderToSeparateWindow = false

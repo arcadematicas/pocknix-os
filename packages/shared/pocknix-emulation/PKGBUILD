@@ -2,12 +2,12 @@
 # configs, shipped as an arch=any data/scripts package.
 pkgname=pocknix-emulation
 pkgver=0.1.0
-pkgrel=14
+pkgrel=15
 pkgdesc="ES-DE + preconfigured emulators for the RP6: drop ROMs into ~/Emulation and play; star -> Steam"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
 license=('GPL2')
-# depends() stays 'bash': the emulator runtime ships via config/packages/emulation.list so
+# depends() stays 'bash': the emulator runtime ships as pocknix-emulation-full's depends so
 # makepkg -s does not drag ES-DE/RetroArch/Qt into the build chroot for this data package.
 # The scripts `command -v`-guard their callees, so a runtime-less install degrades gracefully.
 depends=('bash')
