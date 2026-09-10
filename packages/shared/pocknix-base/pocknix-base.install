@@ -35,12 +35,28 @@ _add_shared_repo() {
   echo "pocknix: added the [pocknix-shared] repo (${server}); active from the next update."
 }
 
+# ALARM's default login (password `alarm`, in wheel) shipped in every image and nothing
+# uses it; with SSH on it is a known root credential. The home stays: a login seeds it
+# like any user's, so its contents say nothing about whether someone moved in.
+_drop_alarm_user() {
+  [ -d /run/systemd/system ] || return 0
+  id alarm >/dev/null 2>&1 || return 0
+  if pgrep -u alarm >/dev/null 2>&1; then
+    echo "pocknix: 'alarm' has running processes; it is removed on the next update instead."
+    return 0
+  fi
+  userdel alarm >/dev/null 2>&1 \
+    && echo "pocknix: removed ALARM's default 'alarm' login (its files stay in /home/alarm)."
+}
+
 post_install() {
   _prune_superseded
   _add_shared_repo
+  _drop_alarm_user
 }
 
 post_upgrade() {
   _prune_superseded
   _add_shared_repo
+  _drop_alarm_user
 }

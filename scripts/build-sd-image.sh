@@ -139,13 +139,16 @@ EOF
   # --- non-root 'deck' session user ---
   # PipeWire refuses to run as root (ConditionUser=!root), so audio ("no output devices detected" in
   # Steam) only works for a normal user; bwrap/pressure-vessel (Proton) prefer non-root too. uid 1001
-  # (ALARM ships 'alarm' at 1000). Groups: video/render (GPU), input (gamepad), audio, seat (seatd),
+  # because 1000 was ALARM's 'alarm' login when deck was introduced, and installed devices keep
+  # it. Groups: video/render (GPU), input (gamepad), audio, seat (seatd),
   # wheel (polkit admin via 50-pocknix-deck.rules). The overlay (rsync'd above) already placed
   # /home/deck/.bash_profile (boot-to-Steam) + the tty1 autologin=deck drop-in; useradd -m reuses
   # that home, then we chown it.
   log "creating non-root 'deck' session user (audio + Proton need a normal user)"
   chroot "${root}" useradd -m -u 1001 -U -s /bin/bash -G video,render,input,audio,seat,wheel deck 2>/dev/null || true
   echo "deck:${SD_DECK_PASSWORD:-${SD_ROOT_PASSWORD}}" | chroot "${root}" chpasswd
+  # ALARM's default login (password `alarm`, wheel) is a known root credential once SSH is on.
+  chroot "${root}" userdel -r alarm 2>/dev/null || true
   # XDG user dirs in deck's home (Dolphin "Places", file dialogs, screenshots, downloads expect
   # these). The xdg-user-dirs package (pocknix-desktop-full) also writes ~/.config/user-dirs.dirs at first
   # login so XDG_PICTURES_DIR etc. resolve, but create them here so they exist from first boot.
@@ -378,8 +381,8 @@ main() {
   # locked image). Deleted from the IMAGE only; ROOTFS_DIR keeps them for make snapshot.
   rm -f "${MNT}/var/lib/pacman/sync/"*.db "${MNT}/var/lib/pacman/sync/"*.db.sig
   firstboot_config "${MNT}"
-  # Ownership gate: nothing outside /home should be owned by the host build user (uid/gid 1000 =
-  # 'alarm' in the rootfs). A stray host-owned path here means a host->rootfs copy leaked ownership
+  # Ownership gate: nothing outside /home should be owned by the host build user (uid/gid 1000).
+  # A stray host-owned path here means a host->rootfs copy leaked ownership
   # (see the --chown=root:root rsyncs above) — which silently breaks privilege-bounded services like
   # systemd-timedated (couldn't write /etc/localtime -> timezone changes had no effect). Fail loudly.
   # Each subvolume is its own st_dev, so -xdev stops at their boundaries: sweep every mounted

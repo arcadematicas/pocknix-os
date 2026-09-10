@@ -19,7 +19,7 @@ ACTION=$1
 DEVBASE=$2
 DEVICE="/dev/${DEVBASE}"
 
-# deck is 1001 on pocknix (uid 1000 is alarm); every SteamOS device numbers deck 1000.
+# deck is 1001 on pocknix (1000 was ALARM's default login); every SteamOS device numbers deck 1000.
 STEAM_UID=1001
 STEAMOS_UID=1000
 STEAM_HOME=/home/deck
