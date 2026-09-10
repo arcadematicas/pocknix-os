@@ -7,7 +7,8 @@ SHARE=/usr/share/pocknix-emulation
 MERGE=/usr/lib/pocknix/pocknix-seed-merge
 EMUS=/opt/pocknix/emulators
 EMU="${HOME}/Emulation"
-MODE=add-only
+MODE=merge
+STATE="${XDG_STATE_HOME:-${HOME}/.local/state}"
 
 # Seeds are authored for a 120Hz, 1080-line panel and adapted below; absent keys pass them through.
 [ -r /usr/lib/pocknix/device.conf ] && . /usr/lib/pocknix/device.conf
@@ -53,16 +54,16 @@ have_cemu()      { command -v Cemu >/dev/null 2>&1; }
 have_ppsspp()    { command -v PPSSPPSDL >/dev/null 2>&1 || command -v ppsspp >/dev/null 2>&1; }
 EMULATORS=(esde retroarch armsx2 eden dolphin cemu ppsspp)
 
-# Rendered seeds live here for the helper; the merge helper compares them against the baseline
-# it keeps under ~/.local/state/pocknix/seed-baseline.
 TMP="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/pocknix-seed.XXXXXX")" || exit 0
 trap 'rm -rf "${TMP}"' EXIT
 
 have_merge() { command -v python3 >/dev/null 2>&1 && [ -x "${MERGE}" ]; }
-seed_b() {  # $1 format, $2 rendered seed, $3 target
+seed_b() {  # $1 format, $2 rendered seed, $3 target, $4 policy name (optional)
+  local policy=()
+  [ -n "${4:-}" ] && [ -f "${SHARE}/$4.policy" ] && policy=(--policy "${SHARE}/$4.policy")
   mkdir -p "$(dirname "$3")" 2>/dev/null || return 0
   if have_merge; then
-    "${MERGE}" --class b --format "$1" --mode "${MODE}" "$2" "$3" 2>&1 || true
+    "${MERGE}" --class b --format "$1" --mode "${MODE}" ${policy[@]+"${policy[@]}"} "$2" "$3" 2>&1 || true
   else
     [ -f "$3" ] || cp "$2" "$3" 2>/dev/null || true
   fi
@@ -80,7 +81,7 @@ seed_a() {  # $1 source file or dir, $2 target
 
 seed_esde() {
   printf '<?xml version="1.0"?>\n<string name="ROMDirectory" value="%s" />\n' "${ROMS}" > "${TMP}/es_settings.xml"
-  seed_b esxml "${TMP}/es_settings.xml" "${ESDE_SETTINGS}"
+  seed_b esxml "${TMP}/es_settings.xml" "${ESDE_SETTINGS}" es_settings
   seed_a "${SHARE}/es_find_rules.xml" "${ESDE_CUSTOM}/es_find_rules.xml"
   seed_a "${SHARE}/es_systems.xml" "${ESDE_CUSTOM}/es_systems.xml"
 }
@@ -93,43 +94,38 @@ seed_retroarch() {
   sed -e "s/^video_refresh_rate = .*/video_refresh_rate = \"${REFRESH}.000000\"/" \
       -e "s/^video_swap_interval = .*/video_swap_interval = \"${_si}\"/" \
       "${SHARE}/retroarch.cfg" > "${TMP}/retroarch.cfg"
-  seed_b racfg "${TMP}/retroarch.cfg" "${HOME}/.config/retroarch/retroarch.cfg"
-  # Pad profiles from retroarch-autoconfig-pocknix go into RetroArch's default, WRITABLE
-  # autoconfig dir so user-saved custom profiles coexist. Without them RetroArch sees Steam
-  # Input's virtual X360 pad but has no bindings: controls fully dead.
+  seed_b racfg "${TMP}/retroarch.cfg" "${HOME}/.config/retroarch/retroarch.cfg" retroarch
+  # Pad profiles go into RetroArch's WRITABLE autoconfig dir so user-saved profiles coexist;
+  # without them the Steam Input pad has no bindings at all.
   [ -d /usr/share/libretro/autoconfig/udev ] && \
     seed_a /usr/share/libretro/autoconfig/udev "${HOME}/.config/retroarch/autoconfig/udev"
-  # Vendored slang shaders (retroarch-shaders-pocknix) are linked, not copied (79 MB): the
-  # shader dir itself stays the writable user default so preset saving keeps working. Skipped
-  # if the user already has a real shaders_slang (e.g. from the Online Updater).
+  # Linked, not copied (79 MB): the shader dir stays the writable default so preset saving
+  # works. A real shaders_slang (Online Updater) wins.
   local shaders="${HOME}/.config/retroarch/shaders/shaders_slang"
   if [ -d /usr/share/libretro/shaders/shaders_slang ] && [ ! -e "${shaders}" ]; then
     mkdir -p "${HOME}/.config/retroarch/shaders"
     ln -s /usr/share/libretro/shaders/shaders_slang "${shaders}" 2>/dev/null || true
   fi
-  # per-system tuning: content-dir overrides + shader presets (e.g. mGBA integer scale + lcd3x)
   [ -d "${SHARE}/retroarch-config" ] && \
     seed_a "${SHARE}/retroarch-config" "${HOME}/.config/retroarch/config"
 }
 
 seed_armsx2() {
-  # ARMSX2 moved from PCSX2's stock ~/.config/PCSX2 to ~/.config/ARMSX2 (same tree layout
-  # inside). The migration copy must precede the seed, or an upgraded device gets a fresh
-  # seed, the setup wizard, and orphaned memcards/savestates.
+  # The PCSX2 -> ARMSX2 dir migration must precede the seed, or an upgraded device gets a
+  # fresh seed, the setup wizard and orphaned memcards.
   if [ -f "${HOME}/.config/PCSX2/inis/PCSX2.ini" ] && [ ! -f "${HOME}/.config/ARMSX2/inis/PCSX2.ini" ]; then
     mkdir -p "${HOME}/.config/ARMSX2"
     cp -a "${HOME}/.config/PCSX2/." "${HOME}/.config/ARMSX2/" 2>/dev/null || true
   fi
   sed "s|__HOME__|${HOME}|g" "${SHARE}/armsx2-PCSX2.ini.in" > "${TMP}/PCSX2.ini"
-  seed_b ini "${TMP}/PCSX2.ini" "${HOME}/.config/ARMSX2/inis/PCSX2.ini"
+  seed_b ini "${TMP}/PCSX2.ini" "${HOME}/.config/ARMSX2/inis/PCSX2.ini" armsx2-PCSX2
 }
 
 seed_eden() {
-  # vsync is per-device: Mailbox (1) on 120Hz panels, FIFO (2) on 60Hz ones, where Mailbox is
-  # bouncy. The rest of the seed (pad bindings, 1x resolution) is authored.
+  # Mailbox vsync (1) is bouncy on 60Hz panels, so FIFO (2) there
   _vs=2; [ "${REFRESH}" -ge 120 ] 2>/dev/null && _vs=1
   sed "s/^use_vsync=.*/use_vsync=${_vs}/" "${SHARE}/eden-qt-config.ini.in" > "${TMP}/qt-config.ini"
-  seed_b ini "${TMP}/qt-config.ini" "${HOME}/.config/eden/qt-config.ini"
+  seed_b ini "${TMP}/qt-config.ini" "${HOME}/.config/eden/qt-config.ini" eden-qt-config
 }
 
 seed_dolphin() {
@@ -142,7 +138,7 @@ seed_cemu() {
   # settings.xml existing at all is what skips Cemu's onboarding wizard (CemuApp isFirstStart).
   # The controller profile is session-dependent, so pocknix-cemu-profile writes it at launch.
   sed "s|__ROMS__|${ROMS}|g" "${SHARE}/cemu-settings.xml.in" > "${TMP}/settings.xml"
-  seed_b xml "${TMP}/settings.xml" "${HOME}/.config/Cemu/settings.xml"
+  seed_b xml "${TMP}/settings.xml" "${HOME}/.config/Cemu/settings.xml" cemu-settings
 }
 
 seed_ppsspp() {
@@ -153,9 +149,55 @@ seed_ppsspp() {
   seed_b ini "${TMP}/ppsspp.ini" "${HOME}/.config/ppsspp/PSP/SYSTEM/ppsspp.ini"
 }
 
+# ROMS was read before any reset, so restoring ES-DE defaults keeps the user's ROM location
+label() {
+  case "$1" in
+    esde) echo "ES-DE frontend" ;;          retroarch) echo "RetroArch" ;;
+    armsx2) echo "ARMSX2 (PS2)" ;;          eden) echo "Eden (Switch)" ;;
+    dolphin) echo "Dolphin (GameCube/Wii)" ;; cemu) echo "Cemu (Wii U)" ;;
+    ppsspp) echo "PPSSPP (PSP)" ;;
+  esac
+}
+STAMP="$(date +%Y%m%d-%H%M%S)"
+reset_target() {  # $1 target file
+  [ -e "$1" ] && mv "$1" "$1.bak-${STAMP}" 2>/dev/null
+  rm -f "${STATE}/pocknix/seed-baseline/${1#"${HOME}/"}" "$1.pocknixnew"
+}
+reset_dir() {  # $1 shipped dir, $2 target dir: only the files we ship, never the user's own
+  local f
+  [ -d "$1" ] || return 0
+  while IFS= read -r f; do reset_target "$2/${f#"$1/"}"; done < <(find "$1" -type f)
+}
+reset_esde()      { reset_target "${ESDE_SETTINGS}"; reset_target "${ESDE_CUSTOM}/es_find_rules.xml"; reset_target "${ESDE_CUSTOM}/es_systems.xml"; }
+reset_retroarch() {
+  reset_target "${HOME}/.config/retroarch/retroarch.cfg"
+  reset_dir /usr/share/libretro/autoconfig/udev "${HOME}/.config/retroarch/autoconfig/udev"
+  reset_dir "${SHARE}/retroarch-config" "${HOME}/.config/retroarch/config"
+}
+reset_armsx2()    { reset_target "${HOME}/.config/ARMSX2/inis/PCSX2.ini"; }
+reset_eden()      { reset_target "${HOME}/.config/eden/qt-config.ini"; }
+reset_dolphin()   { local f; for f in Dolphin.ini GFX.ini GCPadNew.ini; do reset_target "${HOME}/.config/dolphin-emu/${f}"; done; }
+reset_cemu()      { reset_target "${HOME}/.config/Cemu/settings.xml"; }
+reset_ppsspp()    { reset_target "${HOME}/.config/ppsspp/PSP/SYSTEM/ppsspp.ini"; }
+
 present=()
 for e in "${EMULATORS[@]}"; do "have_${e}" && present+=("${e}"); done
-# nothing of the layer installed: no ~/Emulation, no emulator config dirs
+
+case "${1:-}" in
+  --list)
+    for e in "${present[@]}"; do printf '%s\t%s\n' "${e}" "$(label "${e}")"; done
+    exit 0 ;;
+  --reset)
+    shift
+    [ "$#" -gt 0 ] || { echo "usage: pocknix-roms-init --reset <${EMULATORS[*]// /|}|all>" >&2; exit 2; }
+    [ "$1" = all ] && set -- "${present[@]}"
+    for e in "$@"; do
+      case " ${present[*]} " in *" ${e} "*) ;; *) echo "pocknix-roms-init: ${e} is not installed" >&2; continue ;; esac
+      "reset_${e}"; "seed_${e}" || true
+    done
+    exit 0 ;;
+esac
+# a layer-less device must not grow ~/Emulation or emulator config dirs
 [ "${#present[@]}" -gt 0 ] || exit 0
 
 mkdir -p "${EMU}/BIOS" "${EMU}/Saves" "${EMU}/States"
