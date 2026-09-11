@@ -277,10 +277,12 @@ def parse(fmt, data):
 
 class Policy:
     """never = keys we add if absent but never modify; list = keys whose value is a list even
-    with one entry (a parent the user may extend, e.g. GamePaths)."""
+    with one entry (a parent the user may extend, e.g. GamePaths); was = the value(s) a key
+    held before we seeded it (the app's own default), so a device that still has it counts as
+    untouched even though no baseline recorded it."""
 
     def __init__(self, path):
-        self.never_glob, self.never_re, self.lists = [], [], set()
+        self.never_glob, self.never_re, self.lists, self.was = [], [], set(), {}
         if not path:
             return
         with open(path) as f:
@@ -296,6 +298,9 @@ class Policy:
                     self.never_glob.append(arg)
                 elif verb == "list":
                     self.lists.add(arg)
+                elif verb == "was":
+                    key, _, val = arg.partition(" ")
+                    self.was.setdefault(key, []).append(val.strip())
 
     def never(self, key):
         return any(fnmatch.fnmatchcase(key, g) for g in self.never_glob) or \
@@ -345,20 +350,21 @@ def class_b(fmt, seed_path, dst, policy_path, mode):
             continue
         if same(tv, sv):
             continue
-        if mode != "merge" or base is None or policy.never(key):
+        if mode != "merge" or policy.never(key):
             kept += 1
             if DRY:
-                log(dst, f"keep {key} ({'never-touch' if policy.never(key) else 'no baseline' if base is None else 'add-only'})")
+                log(dst, f"keep {key} ({'never-touch' if policy.never(key) else 'add-only'})")
             continue
-        bv = base.get(key)
-        if bv is not None and same(tv, bv):
+        bv = base.get(key) if base is not None else None
+        olds = [bv] if bv is not None else policy.was.get(key, [])
+        if any(same(tv, o) for o in olds):
             target.set(key, sv)
             updated += 1
             log(dst, f"set {key}")
         else:
             kept += 1
             if DRY:
-                log(dst, f"keep {key} (user-changed)")
+                log(dst, f"keep {key} ({'user-changed' if olds else 'no baseline'})")
     if added or updated:
         write(dst, target.serialize(), like=dst)
     write(base_path, seed_data)
