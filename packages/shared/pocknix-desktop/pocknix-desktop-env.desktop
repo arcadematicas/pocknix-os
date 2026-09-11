@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=pocknix Wayland env import
+Comment=Import Wayland/X11 session vars into systemd --user so D-Bus-activated services work
+Exec=/usr/bin/pocknix-desktop-env
+# Only meaningful inside a Plasma session (imports the session's Wayland vars).
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-phase=1

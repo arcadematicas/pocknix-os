@@ -1,0 +1,13 @@
+#!/bin/bash
+# Import the Wayland/X11 session environment into the systemd user manager and
+# the D-Bus activation environment. Without this, D-Bus-activated user services
+# (plasma-kscreen, kded modules, portals...) start without WAYLAND_DISPLAY and
+# fail ("Failed to create wl_display"). Portado de ArmadaOS desktop-bootstrap.
+set -u
+envs=(DESKTOP_SESSION XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE
+      WAYLAND_DISPLAY DISPLAY XAUTHORITY KDE_FULL_SESSION KDE_SESSION_VERSION)
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+  dbus-update-activation-environment --systemd "${envs[@]}" 2>/dev/null || true
+else
+  systemctl --user import-environment "${envs[@]}" 2>/dev/null || true
+fi

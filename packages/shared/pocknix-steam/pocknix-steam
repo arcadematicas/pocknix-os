@@ -82,6 +82,36 @@ esac
 GS_LOG="${HOME}/pocknix-steam.log"
 # gamepadui sizes its UI from the output's physical mm; the ~96 DPI default reads as a desktop
 # monitor and renders the UI tiny. -noshaders keeps fossilize from stealing CPU during play.
+
+# Steam/gamescope feature gates (portado de ArmadaOS; sin ellas Steam no expone VRR/tearing/HDR/NIS/fps-limiter dinámico en el QAM)
+export STEAM_GAMESCOPE_VRR_SUPPORTED=1
+export STEAM_MANGOAPP_PRESETS_SUPPORTED=1
+export STEAM_USE_MANGOAPP=1
+export STEAM_USE_DYNAMIC_VRS=1
+export STEAM_GAMESCOPE_HAS_TEARING_SUPPORT=1
+export STEAM_GAMESCOPE_TEARING_SUPPORTED=1
+export STEAM_GAMESCOPE_HDR_SUPPORTED=1
+export STEAMOS_STEAM_REBOOT_SENTINEL="/tmp/steamos-reboot-sentinel"
+export REBOOT_SENTINEL="$STEAMOS_STEAM_REBOOT_SENTINEL"
+export STEAMOS_STEAM_SHUTDOWN_SENTINEL="/tmp/steamos-shutdown-sentinel"
+export SHUTDOWN_SENTINEL="$STEAMOS_STEAM_SHUTDOWN_SENTINEL"
+export STEAM_ENABLE_VOLUME_HANDLER=1
+export SRT_URLOPEN_PREFER_STEAM=1
+export STEAM_DISABLE_AUDIO_DEVICE_SWITCHING=1
+export STEAM_MULTIPLE_XWAYLANDS=1
+export STEAM_GAMESCOPE_DYNAMIC_FPSLIMITER=1
+export STEAM_GAMESCOPE_NIS_SUPPORTED=1
+export STEAM_ALLOW_DRIVE_UNMOUNT=1
+export STEAM_ALLOW_DRIVE_ADOPT=1
+export STEAM_DISABLE_MANGOAPP_ATOM_WORKAROUND=1
+export STEAM_MANGOAPP_HORIZONTAL_SUPPORTED=1
+export STEAM_GAMESCOPE_FANCY_SCALING_SUPPORT=1
+export STEAM_GAMESCOPE_COLOR_MANAGED=1
+export STEAM_GAMESCOPE_VIRTUAL_WHITE=1
+export QT_IM_MODULE=steam
+export GTK_IM_MODULE=Steam
+export GAMESCOPE_FALLBACK_APPID=0x41524d41
+
 env -u WAYLAND_DISPLAY \
   GAMESCOPE_FAKE_OUTPUT_MM="${PANEL_MM}" \
   gamescope -W "${GS_W}" -H "${GS_H}" -r "${REFRESH}" --xwayland-count 2 --mangoapp --backend drm \

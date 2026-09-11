@@ -3,7 +3,7 @@
 # so makepkg -s does not drag all of KDE/Qt into the build chroot for this arch=any data package.
 pkgname=pocknix-desktop
 pkgver=0.1.0
-pkgrel=20
+pkgrel=21
 pkgdesc="Plasma Mobile desktop session for the RP6 + game<->desktop session switch"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -11,6 +11,7 @@ license=('GPL2')
 depends=('bash')
 install='pocknix-desktop.install'
 source=('pocknix-desktop' 'pocknix-desktop-rotate' 'pocknix-desktop-rotate.desktop'
+        'pocknix-desktop-env' 'pocknix-desktop-env.desktop'
         'pocknix-desktop-remove-taskpanel' 'pocknix-desktop-remove-taskpanel.desktop'
         'steamos-session-select' 'return-to-gamemode.desktop'
         'pocknix-flathub-setup' 'pocknix-flathub.service' 'pocknix-flathub-dispatcher'
@@ -19,7 +20,7 @@ source=('pocknix-desktop' 'pocknix-desktop-rotate' 'pocknix-desktop-rotate.deskt
         'pocknix-fontcache-prune' '99-pocknix-fontcache.hook'
         'pocknix-panel-touchfix' '98-pocknix-panel-touchfix.hook')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-desktop"          "${pkgdir}/usr/bin/pocknix-desktop"
@@ -28,6 +29,11 @@ package() {
   # Autostart the rotation transform once the Plasma session (and kscreen kded) is up.
   install -Dm644 "${srcdir}/pocknix-desktop-rotate.desktop" \
     "${pkgdir}/etc/xdg/autostart/pocknix-desktop-rotate.desktop"
+  # Import Wayland/X11 session vars into systemd --user and D-Bus activation env (phase 1,
+  # before kscreen-doctor and other D-Bus-activated services try to start).
+  install -Dm755 "${srcdir}/pocknix-desktop-env"          "${pkgdir}/usr/bin/pocknix-desktop-env"
+  install -Dm644 "${srcdir}/pocknix-desktop-env.desktop"  \
+    "${pkgdir}/etc/xdg/autostart/pocknix-desktop-env.desktop"
   # Remove the leftover gesture-bar taskpanel every session (see the script header for why).
   install -Dm755 "${srcdir}/pocknix-desktop-remove-taskpanel" \
     "${pkgdir}/usr/bin/pocknix-desktop-remove-taskpanel"

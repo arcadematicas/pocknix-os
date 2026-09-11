@@ -2,7 +2,7 @@
 # gamescope launcher, and the ARM-Proton compat-tool plumbing.
 pkgname=pocknix-steam
 pkgver=0.1.0
-pkgrel=57
+pkgrel=58
 pkgdesc="Native ARM64 Steam Big Picture (gamescope) for the RP6 — installer + launcher"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -22,6 +22,7 @@ source=('pocknix-steam-install' 'pocknix-steam' 'steam' 'steam.desktop'
         'pocknix-guestos-mount' 'pocknix-guestos.service' 'graphics_provider.json')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
             'SKIP' 'SKIP' 'SKIP' 'SKIP')
+noextract=()
 
 package() {
   install -Dm755 "${srcdir}/pocknix-steam-install" "${pkgdir}/usr/bin/pocknix-steam-install"
@@ -44,4 +45,10 @@ package() {
   install -Dm755 "${srcdir}/pocknix-guestos-mount"         "${pkgdir}/usr/lib/pocknix/pocknix-guestos-mount"
   install -Dm644 "${srcdir}/pocknix-guestos.service"       "${pkgdir}/usr/lib/systemd/system/pocknix-guestos.service"
   install -Dm644 "${srcdir}/graphics_provider.json"        "${pkgdir}/usr/share/pocknix-steam/graphics_provider.json"
+  # x86 protocol libs (libwayland-client, libxkbcommon) injected into Proton's lib dir
+  # so the controller works under pressure-vessel.  Source tree lives next to PKGBUILD
+  # (like pocknix-decky's pocknix-control), so use ${startdir}, not ${srcdir}.
+  install -d -m755 "${pkgdir}/usr/share/pocknix/proton-inject"
+  cp -a "${startdir}/proton-inject/x86_64-linux-gnu" \
+        "${pkgdir}/usr/share/pocknix/proton-inject/x86_64-linux-gnu"
 }

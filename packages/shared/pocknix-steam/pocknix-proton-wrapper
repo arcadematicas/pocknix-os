@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -17,6 +18,7 @@ TWEAKS_CONFIG = pathlib.Path("/etc/pocknix/game-tweaks.json")
 FEX_PROFILES_CONFIG = pathlib.Path("/usr/share/pocknix/fex-profiles.json")
 TURNIP_ARM_DIR = pathlib.Path("/usr/share/pocknix/vk-arm")
 TURNIP_X86_DIR = pathlib.Path("/usr/share/pocknix/vk-x86")
+PROTON_INJECT_SRC = pathlib.Path("/usr/share/pocknix/proton-inject/x86_64-linux-gnu")
 # pressure-vessel resolves graphics against the FEX rootfs, NOT the host, so pinning a version
 # the image lacks poisons the container env and the game loses Vulkan entirely.
 CONTAINER_VK_LIST = pathlib.Path("/usr/share/fex-emu/vk-x86-container.list")
@@ -278,6 +280,30 @@ def heal_arm_prefix(real_proton):
         print(f"pocknix-proton: healed {name} (amd64 redist copy -> arm64 builtin)", file=sys.stderr)
 
 
+def inject_x86_protocol_libs():
+    # pressure-vessel doesn't provide the x86 libwayland-client/libxkbcommon the game
+    # needs, so it can't talk to the compositor and the controller is dead. Remove once
+    # pressure-vessel ships these libs natively.
+    if not PROTON_INJECT_SRC.is_dir():
+        return
+    for tool in os.environ.get("STEAM_COMPAT_TOOL_PATHS", "").split(":"):
+        files = pathlib.Path(tool) / "files" if tool else None
+        if files is None:
+            continue
+        lib_dir = files / "lib" / "x86_64-linux-gnu"
+        if not lib_dir.is_dir() or (files / "bin-arm64").is_dir():  # skip arm64ec Proton
+            continue
+        # link targets must be copied before the symlinks that point at them
+        for src in sorted(PROTON_INJECT_SRC.iterdir(), key=pathlib.Path.is_symlink):
+            dest = lib_dir / src.name
+            if dest.exists() or dest.is_symlink():
+                continue
+            if src.is_symlink():
+                os.symlink(os.readlink(src), dest)
+            else:
+                shutil.copy2(src, dest)
+
+
 def apply_env_vars(settings):
     # Free-form per-game env ("Environment Variables" tweak). shlex so quoted values with
     # spaces survive (DXVK_CONFIG="dxgi.customDeviceDesc = ..."). Anything already in our
@@ -295,6 +321,40 @@ def apply_env_vars(settings):
             os.environ.setdefault(key, value)
 
 
+def repair_wedged_controller():
+    # x86 Proton can leave the pad registered as a bare USB device, never promoted to
+    # WINEXINPUT (dead under x86 too); an arm64ec Proton reusing that prefix then can't
+    # re-register it - winebus hits "already exists" (plugplay 0xe000020b) - and inherits
+    # the dead pad. Drop the stale VID_28DE sections to re-register.
+    data_path = os.environ.get("STEAM_COMPAT_DATA_PATH")
+    if not data_path:
+        return
+    reg = pathlib.Path(data_path) / "pfx" / "system.reg"
+    try:
+        text = reg.read_text(encoding="utf-8", errors="surrogateescape")
+    except FileNotFoundError:
+        return
+    lines = text.splitlines(keepends=True)
+    pad_sections = sum(1 for line in lines if line.startswith("[") and "VID_28DE" in line)
+    # Only a WINEXINPUT key for this same pad proves promotion; an old target's keys outlive it.
+    promoted = any("WINEXINPUT" in line and "VID_28DE" in line for line in lines)
+    if not pad_sections or promoted:
+        return  # no pad registered, or it promoted fine - leave the prefix alone
+    reg.with_name("system.reg.pocknix-bak").write_text(
+        text, encoding="utf-8", errors="surrogateescape")
+    kept, skip = [], False
+    for line in lines:
+        if line.startswith("["):
+            skip = "VID_28DE" in line
+        if not skip:
+            kept.append(line)
+    tmp = reg.with_name(".system.reg.pocknix-tmp")
+    tmp.write_text("".join(kept), encoding="utf-8", errors="surrogateescape")
+    os.replace(tmp, reg)
+    print(f"pocknix-proton: cleared wedged controller state "
+          f"({pad_sections} pad sections)", file=sys.stderr)
+
+
 def main():
     if len(sys.argv) < 2:
         raise SystemExit("usage: pocknix-proton-wrapper PROTON_ENTRYPOINT [ARGS...]")
@@ -302,6 +362,9 @@ def main():
     real_proton = sys.argv[1]
     args = [real_proton, *sys.argv[2:]]
     game_id = appid()
+    # Proton-CachyOS enables its shader-compiler HUD unless DXVK_HUD is already set;
+    # keep the default clean while preserving an explicit user HUD (Steam launch options).
+    os.environ.setdefault("DXVK_HUD", "none")
     settings = {}
     try:
         contract = load_fex_contract()
@@ -332,6 +395,14 @@ def main():
         heal_arm_prefix(real_proton)
     except Exception as exc:
         print(f"pocknix-proton: prefix heal failed: {exc}", file=sys.stderr)
+    try:
+        inject_x86_protocol_libs()
+    except Exception as exc:
+        print(f"pocknix-proton: protocol-lib inject skipped: {exc}", file=sys.stderr)
+    try:
+        repair_wedged_controller()
+    except Exception as exc:
+        print(f"pocknix-proton: controller repair skipped: {exc}", file=sys.stderr)
 
     try:
         os.execv(real_proton, args)
