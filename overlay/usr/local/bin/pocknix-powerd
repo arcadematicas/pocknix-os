@@ -35,6 +35,9 @@ RESUME_IGNORE_SECS = 3.0   # swallow KEY_POWER this long after any resume
 RESCAN_SECS        = 5     # re-enumerate devices that (dis)appeared
 SUSPEND_TIMEOUT    = 5     # never let a stuck systemctl block the loop
 BACKLIGHT_GLOB     = "/sys/class/backlight/*/bl_power"
+# DRM connector DPMS ("On"/"Off"/...) is the reliable screen state. The Odin 3's backlight
+# bl_power node is stuck at 4 (FB_BLANK_POWERDOWN) even when the panel is lit.
+DRM_DPMS_GLOB      = "/sys/class/drm/card*-*/dpms"
 
 # Per-event journal chatter (suspend/resume/screen-off lines) is off by default; set
 # Environment=POCKNIX_POWERD_DEBUG=1 on the unit to get it back. Device-discovery and
@@ -49,11 +52,24 @@ def boot_mono_delta():
     return time.clock_gettime(time.CLOCK_BOOTTIME) - time.clock_gettime(time.CLOCK_MONOTONIC)
 
 def screen_is_on():
-    # bl_power uses FB_BLANK_* (0 = FB_BLANK_UNBLANK = on; 4 = FB_BLANK_POWERDOWN). The panel is
+    # Primary signal: the DRM connector DPMS state of the INTERNAL panel. The Odin 3's backlight
+    # bl_power node is stuck at 4 (FB_BLANK_POWERDOWN) even when the panel is lit, so the bl_power
+    # heuristic below made the daemon think the screen was always off (short press => "wake only",
+    # never suspend). External/virtual connectors (DP-1, Writeback-1) report "On" with nothing
+    # attached, so only DSI/eDP/LVDS count. "On" => panel on.
+    import glob
+    for p in glob.glob(DRM_DPMS_GLOB):
+        if not any(k in p for k in ("DSI", "eDP", "LVDS")):
+            continue
+        try:
+            if open(p).read().strip() == "On":
+                return True
+        except OSError:
+            continue
+    # Fallback: bl_power uses FB_BLANK_* (0 = FB_BLANK_UNBLANK = on; 4 = FB_BLANK_POWERDOWN). The panel is
     # "on" iff SOME backlight reports 0 — the RP6 has a real ae94000.dsi.0 node (tracks DPMS) plus
     # a legacy 'backlight' node stuck at 4, so we OR across all and only treat all-non-zero as off.
     # If we can't read any node, assume ON (fail toward the normal press=suspend behavior).
-    import glob
     found = False
     for p in glob.glob(BACKLIGHT_GLOB):
         found = True

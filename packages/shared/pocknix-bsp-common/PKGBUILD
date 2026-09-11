@@ -3,7 +3,7 @@
 # live in devices/<name>/packages/pocknix-bsp-<name>, which depends on this package.
 pkgname=pocknix-bsp-common
 pkgver=0.1.0
-pkgrel=13
+pkgrel=14
 pkgdesc="pocknix shared board support: sleep.d dispatcher, suspend hooks, power-key policy, session udev rules, wheel sudo, fan/scheduler daemons, ABL updater"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -16,7 +16,7 @@ optdepends=('inputplumber: the 001-inputplumber suspend hooks manage its USB/IP 
 install=pocknix-bsp-common.install
 source=('pocknix-sleep' 'sdam-debug-pre' 'sdam-debug-post'
         'inputplumber-sleep-pre' 'inputplumber-sleep-post'
-        'usb-role-sleep-pre' 'usb-role-sleep-post'
+        'usb-role-sleep-pre' 'usb-role-sleep-post' 'display-sleep-post'
         '20-pocknix-powerkey.conf'
         '90-pocknix-backlight.rules' '60-pocknix-controllers.rules'
         '10-pocknix-wheel'
@@ -28,7 +28,7 @@ source=('pocknix-sleep' 'sdam-debug-pre' 'sdam-debug-post'
         'iwd-wait-wlan0.conf')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
             'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-sleep" \
@@ -47,6 +47,9 @@ package() {
     "${pkgdir}/usr/lib/pocknix/sleep.d/pre/003-sdam-debug"
   install -Dm755 "${srcdir}/sdam-debug-post" \
     "${pkgdir}/usr/lib/pocknix/sleep.d/post/003-sdam-debug"
+  # Runs last: the display comes back after InputPlumber has re-attached its virtual pad.
+  install -Dm755 "${srcdir}/display-sleep-post" \
+    "${pkgdir}/usr/lib/pocknix/sleep.d/post/004-display"
 
   install -Dm644 "${srcdir}/20-pocknix-powerkey.conf" \
     "${pkgdir}/usr/lib/systemd/logind.conf.d/20-pocknix-powerkey.conf"
