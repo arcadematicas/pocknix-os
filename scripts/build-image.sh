@@ -226,16 +226,33 @@ install_firmware() {
     # --chown=root:root: the vendor firmware tree is owned by the host build user (uid 1000); plain
     # rsync -a would bake that into the rootfs as 'alarm'-owned firmware (and re-own /usr). Force root.
     rsync -a --chown=root:root "${FW_SRC}/" "${root}/usr/lib/firmware/"
-  elif [ "${SOC}" = "sm8250" ]; then
-    # Expected: ROCKNIX ships NO firmware overlay for SM8250 — every blob in
-    # kernel/sm8250/config/kernel-firmware.dat (a650 GPU, adsp/cdsp, ath11k,
-    # BT) comes from upstream linux-firmware, which ALARM's linux-firmware/
-    # linux-firmware-qcom packages already put in the rootfs.
+  elif [ "${SOC}" = "sm8250" ] || [ "${SOC}" = "sm8750" ]; then
+    # Expected: ROCKNIX ships NO firmware overlay for these SoCs — every blob in
+    # kernel/<soc>/config/kernel-firmware.dat (a650/gen80000 GPU, adsp/cdsp,
+    # ath11k/ath12k, BT, ...) comes from upstream linux-firmware, which ALARM's
+    # linux-firmware/linux-firmware-qcom packages already put in the rootfs.
+    # (ROCKNIX now builds its per-device blobs into the kernel via
+    # CONFIG_EXTRA_FIRMWARE instead of shipping a rootfs overlay, so the
+    # kernel-overlays path the profile points at no longer exists upstream.)
     log "no ${SOC} firmware overlay (expected: all blobs come from ALARM linux-firmware packages)"
   else
     # Fatal, not a warn: this shipped an image with dead wifi/audio/battery once
     # (fresh worktree, gitignored vendor/ absent) and the warn scrolled past.
     die "ROCKNIX firmware overlay not at ${FW_SRC} — run 'make sync' (or copy vendor/ from a synced checkout). Without it wifi, audio and battery reporting are dead on ${SOC}."
+  fi
+
+  # --- pocknix firmware overrides (committed) --------------------------------
+  # Blobs that must NOT come from the ALARM/ROCKNIX firmware: applied AFTER the
+  # rsync above so ours win. Currently the AYN Odin 3 ADSP charger firmware
+  # (adsp.mbn + adsp_dtb.mbn at qcom/sm8750/): the DTS firmware-name points there
+  # and adsp_dtb.mbn carries the battery-authentication config. Without it the
+  # ADSP charger firmware falls into TEST MODE (state 9) and the battery never
+  # charges under Linux. See BATTERY-ISSUE.md / FIX-CARGA-BATERIA.md.
+  local fw_override="${DEVICE_DIR}/firmware"
+  if [ -d "${fw_override}" ] && [ -n "$(ls -A "${fw_override}" 2>/dev/null)" ]; then
+    log "applying pocknix firmware overrides -> rootfs /usr/lib/firmware ($(du -sh "${fw_override}" | cut -f1))"
+    mkdir -p "${root}/usr/lib/firmware"
+    rsync -a --chown=root:root "${fw_override}/" "${root}/usr/lib/firmware/"
   fi
 }
 
