@@ -258,7 +258,7 @@ configure() {
   # boot). Built-in they are unhealable (no bind attrs); as modules the BSP's
   # pocknix-sm8250-audio-heal service reloads whichever ones lost the race until
   # the sound card assembles.
-  # sm8250-only: the Visionox panel of the newer RP5 / Flip 2 (patches 0104 + 1022); the
+  # sm8250-only: the Visionox panel of the newer RP5 / Flip 2 (patches 0104 + 0105); the
   # symbol only exists once those patches apply, so the synced config cannot carry it.
   if [ "${SOC}" = "sm8250" ]; then
     "${KSRC}/scripts/config" --file "${KSRC}/.config" \

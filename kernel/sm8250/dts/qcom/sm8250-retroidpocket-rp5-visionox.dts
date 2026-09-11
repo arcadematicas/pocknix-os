@@ -24,3 +24,12 @@
 		/delete-property/ touchscreen-inverted-x;
 	};
 };
+
+/*
+ * regulator-boot-on makes the core assume AVDD is already up, so prepare() never
+ * power-cycles it and this panel stays dark on a cold boot (lit only after a
+ * suspend/resume). Without it the driver's enable is a real power-on.
+ */
+&vdda_panel {
+	/delete-property/ regulator-boot-on;
+};

@@ -21,3 +21,8 @@
 		/delete-property/ touchscreen-inverted-x;
 	};
 };
+
+/* Cold-boot power-on, see the rp5-visionox dts. */
+&vdda_panel {
+	/delete-property/ regulator-boot-on;
+};
