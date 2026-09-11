@@ -258,6 +258,21 @@ install_firmware() {
   fi
 }
 
+# Pocknix InputPlumber overrides (committed): the ROCKNIX overlay ships the Odin 3
+# AYN capability map with BTN_BACK -> KeyF1 (their own UI's QAM key), which leaves
+# Steam without a Quick Access button. We override with BTN_BACK -> QuickAccess
+# (the same delta pocknix already applies on SM8250/SM8550). Must run AFTER
+# install_local_packages so it wins over any package-installed copy.
+install_inputplumber_overrides() {
+  local root="$1"
+  local ip_override="${DEVICE_DIR}/inputplumber"
+  if [ -d "${ip_override}" ] && [ -n "$(ls -A "${ip_override}" 2>/dev/null)" ]; then
+    log "applying pocknix InputPlumber overrides -> rootfs /usr/share/inputplumber"
+    mkdir -p "${root}/usr/share/inputplumber"
+    rsync -a --chown=root:root "${ip_override}/" "${root}/usr/share/inputplumber/"
+  fi
+}
+
 # NOTE: kernel integration (modules + Image, and replacing ALARM's linux-aarch64) is now done by
 # the linux-pocknix PACKAGE, installed in install_local_packages() — no separate install_kernel().
 
@@ -359,6 +374,7 @@ main() {
   #    inside install_local_packages from build/kernel/out — run `make kernel` first.
   install_firmware "${ROOTFS_DIR}"
   install_local_packages "${ROOTFS_DIR}"
+  install_inputplumber_overrides "${ROOTFS_DIR}"
   prune_fontconfig_compat_links "${ROOTFS_DIR}"
 
   # Build stamp for support: which base snapshot this image shipped with, and
