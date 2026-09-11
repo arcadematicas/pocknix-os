@@ -242,6 +242,20 @@ install_firmware() {
     # (fresh worktree, gitignored vendor/ absent) and the warn scrolled past.
     die "ROCKNIX firmware overlay not at ${FW_SRC} — run 'make sync' (or copy vendor/ from a synced checkout). Without it wifi, audio and battery reporting are dead on ${SOC}."
   fi
+
+  # --- pocknix firmware overrides (committed) --------------------------------
+  # Blobs that must NOT come from the ROCKNIX overlay: applied AFTER the rsync
+  # above so ours win. Currently the AYN Odin 3 ADSP charger firmware
+  # (adsp.mbn + adsp_dtb.mbn at qcom/sm8750/): the DTS firmware-name points there
+  # and adsp_dtb.mbn carries the battery-authentication config. Without it the
+  # ADSP charger firmware falls into TEST MODE (state 9) and the battery never
+  # charges under Linux. See BATTERY-ISSUE.md / FIX-CARGA-BATERIA.md.
+  local fw_override="${DEVICE_DIR}/firmware"
+  if [ -d "${fw_override}" ] && [ -n "$(ls -A "${fw_override}" 2>/dev/null)" ]; then
+    log "applying pocknix firmware overrides -> rootfs /usr/lib/firmware ($(du -sh "${fw_override}" | cut -f1))"
+    mkdir -p "${root}/usr/lib/firmware"
+    rsync -a --chown=root:root "${fw_override}/" "${root}/usr/lib/firmware/"
+  fi
 }
 
 # NOTE: kernel integration (modules + Image, and replacing ALARM's linux-aarch64) is now done by
