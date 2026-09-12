@@ -59,12 +59,14 @@ def remove(path):
 
 
 
-def class_a_file(src, dst):
+def class_a_file(src, dst, fallback=None):
     new = read(src)
     if new is None:
         return
     cur, base = read(dst), baseline_for(dst)
     old, pn = read(base), dst + ".pocknixnew"
+    if old is None and fallback:
+        old = read(fallback)
     if cur is None:
         write(dst, new)
         log(dst, "seeded")
@@ -82,16 +84,18 @@ def class_a_file(src, dst):
     write(base, new)
 
 
-def class_a(src, dst):
+def class_a(src, dst, fallback=None):
     if not os.path.isdir(src):
-        class_a_file(src, dst)
+        class_a_file(src, dst, fallback)
         return
     # a directory of pad profiles is hundreds of files: log the changes, count the rest
     current = 0
     for root, _, files in os.walk(src):
         for fn in sorted(files):
             s = os.path.join(root, fn)
-            if os.path.isfile(s) and class_a_file(s, os.path.join(dst, os.path.relpath(s, src))) == "current":
+            rel = os.path.relpath(s, src)
+            fb = os.path.join(fallback, rel) if fallback else None
+            if os.path.isfile(s) and class_a_file(s, os.path.join(dst, rel), fb) == "current":
                 current += 1
     if current:
         log(dst, f"{current} file(s) current")
@@ -384,7 +388,7 @@ def same(a, b):
     return a.strip() == b.strip()
 
 
-def class_b(fmt, seed_path, dst, policy_path, mode):
+def class_b(fmt, seed_path, dst, policy_path, mode, fallback=None):
     seed_data = read(seed_path)
     if seed_data is None:
         return
@@ -401,6 +405,8 @@ def class_b(fmt, seed_path, dst, policy_path, mode):
         log(dst, f"unparseable ({e}); left alone")
         return
     base_data = read(base_path)
+    if base_data is None and fallback:
+        base_data = read(fallback)
     base = None
     if base_data is not None:
         try:
@@ -447,16 +453,18 @@ def main():
     ap.add_argument("--policy")
     ap.add_argument("--mode", choices=["add-only", "merge"], default="add-only")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--baseline", help="rendered previous seed (or dir), used only when no per-user baseline exists")
     ap.add_argument("src")
     ap.add_argument("dst")
     a = ap.parse_args()
     DRY = a.dry_run
+    fb = a.baseline if a.baseline and os.path.exists(a.baseline) else None
     if a.cls == "a":
-        class_a(a.src, a.dst)
+        class_a(a.src, a.dst, fb)
     else:
         if not a.format:
             ap.error("--class b needs --format")
-        class_b(a.format, a.src, a.dst, a.policy, a.mode)
+        class_b(a.format, a.src, a.dst, a.policy, a.mode, fb)
 
 
 if __name__ == "__main__":
