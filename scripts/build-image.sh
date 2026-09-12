@@ -17,6 +17,10 @@ for t in curl tar rsync sed; do need_tool "$t"; done
 LOCAL_REPO_DIR="${LOCALREPO_DIR}"                 # per-SoC: build/localrepo/${SOC} (set in lib.sh)
 LOCAL_REPO_SHARED_DIR="${LOCALREPO_SHARED_DIR}"   # SoC-neutral: build/localrepo/shared
 
+# ES-DE + the emulators are an opt-in layer Pocknix Tools installs, so the image leaves them
+# out; =1 bakes them in (and their ALARM deps then need no base-extras.list entry).
+POCKNIX_EMULATION="${POCKNIX_EMULATION:-0}"
+
 render_pacman_conf() {
   local out="$1"
   log "rendering pacman.conf (base: ${POCKNIX_BASE_SNAPSHOT:-live ALARM})"
@@ -72,16 +76,13 @@ install_local_packages() {
   # copy would never be upgraded by a meta install — so force ours here, loudly.
   chroot "${root}" pacman -S --noconfirm --needed \
     pocknix/mesa pocknix/vulkan-freedreno pocknix/gamescope pocknix/mangohud
-  # The layer metas: pocknix-core (mandatory) + all three optional layers (the
-  # image ships the full experience; #48 makes emulation optional behind a
-  # flag). Their unqualified depends resolve by repo order — [pocknix] and
-  # [pocknix-shared] sit ABOVE the base repos (append_local_repo), so pocknix
-  # names always resolve to our builds, ALARM names to ALARM/base.
-  chroot "${root}" pacman -S --noconfirm --needed \
-    pocknix-shared/pocknix-core \
-    pocknix-shared/pocknix-steam-full \
-    pocknix-shared/pocknix-desktop-full \
-    pocknix-shared/pocknix-emulation-full
+  # The layer metas (POCKNIX_EMULATION=1 adds emulation). Their unqualified depends
+  # resolve by repo order: [pocknix] + [pocknix-shared] sit ABOVE the base repos
+  # (append_local_repo), so pocknix names resolve to our builds, ALARM names to base.
+  local metas=(pocknix-core pocknix-steam-full pocknix-desktop-full)
+  if [ "${POCKNIX_EMULATION}" = 1 ]; then metas+=(pocknix-emulation-full)
+  else log "emulation layer left out (POCKNIX_EMULATION=1 bakes it in)"; fi
+  chroot "${root}" pacman -S --noconfirm --needed "${metas[@]/#/pocknix-shared/}"
   # GUARD: these local builds MUST come from [pocknix], not silently fall back / go missing. gamescope
   # especially: ALARM's vanilla lacks --use-rotation-shader and black-screens on the RP6 (bitten 3x).
   local mesa_ver; mesa_ver="$(chroot "${root}" pacman -Q mesa 2>/dev/null | awk '{print $2}')"
@@ -109,10 +110,12 @@ install_local_packages() {
   # one just leaves that system out of ES-DE, which degrades gracefully) — don't
   # fail the whole image over 3DS/GameCube/WiiU.
   local oe
-  for oe in dolphin-emu azahar cemu; do
-    chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
-      || warn "optional emulator ${oe} not in [pocknix-shared] (build failed/skipped?) — image ships WITHOUT it"
-  done
+  if [ "${POCKNIX_EMULATION}" = 1 ]; then
+    for oe in dolphin-emu azahar cemu; do
+      chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
+        || warn "optional emulator ${oe} not in [pocknix-shared] (build failed/skipped?) — image ships WITHOUT it"
+    done
+  fi
   # Kernel: swap ALARM's generic linux-aarch64 for our SoC kernel package (Image + modules,
   # built by `make kernel` -> staged into the package). Its own step (not bundled above) so a
   # missing kernel build errors clearly, and the replace is deterministic. `provides=linux`.

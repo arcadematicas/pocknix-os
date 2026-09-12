@@ -33,8 +33,8 @@
         <fullname>Sony PlayStation</fullname>
         <path>%ROMPATH%/psx</path>
         <extension>.bin .BIN .cbn .CBN .ccd .CCD .chd .CHD .cue .CUE .ecm .ECM .exe .EXE .img .IMG .iso .ISO .m3u .M3U .mdf .MDF .mds .MDS .minipsf .MINIPSF .pbp .PBP .psexe .PSEXE .psf .PSF .toc .TOC .z .Z .znx .ZNX .7z .7Z .zip .ZIP</extension>
-        <command label="DuckStation">%EMULATOR_RETROARCH% -L %CORE_RETROARCH%/duckstation_libretro.so %ROM%</command>
-        <command label="PCSX ReARMed">%EMULATOR_RETROARCH% -L %CORE_RETROARCH%/pcsx_rearmed_libretro.so %ROM%</command>
+        <command label="DuckStation">%EMULATOR_RETROARCH% -f -L %CORE_RETROARCH%/duckstation_libretro.so %ROM%</command>
+        <command label="PCSX ReARMed">%EMULATOR_RETROARCH% -f -L %CORE_RETROARCH%/pcsx_rearmed_libretro.so %ROM%</command>
         <command label="Shortcut or script">%ENABLESHORTCUTS% %EMULATOR_OS-SHELL% %ROM%</command>
         <platform>psx</platform>
         <theme>psx</theme>
@@ -64,7 +64,7 @@
         <fullname>Microsoft Xbox</fullname>
         <path>%ROMPATH%/xbox</path>
         <extension>.iso .ISO</extension>
-        <command label="xemu">/usr/lib/pocknix/es-xemu -dvd_path %ROM%</command>
+        <command label="xemu">/usr/lib/pocknix/es-xemu -full-screen -dvd_path %ROM%</command>
         <command label="Shortcut or script">%ENABLESHORTCUTS% %EMULATOR_OS-SHELL% %ROM%</command>
         <platform>xbox</platform>
         <theme>xbox</theme>

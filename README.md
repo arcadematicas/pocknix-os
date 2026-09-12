@@ -93,7 +93,7 @@ Additional options worth trying are **Proton-GE 11 (ARM64)** and **Proton-CachyO
 
 ## Emulation
 
-pocknix-os ships **ES-DE** (EmulationStation Desktop Edition) with a set of preconfigured emulators. Drop your ROMs into `~/Emulation` and they show up ready to play, no per-emulator setup needed.
+pocknix-os offers **ES-DE** (EmulationStation Desktop Edition) with a set of preconfigured emulators. As of v0.4 it is not installed out of the box: open **Pocknix Tools** in desktop mode and pick *Install the emulation layer*, and everything below is downloaded and set up. Drop your ROMs into `~/Emulation` and they show up ready to play, no per-emulator setup needed. The same entry removes it again, keeping your ROMs, saves and settings.
 
 **Star a game as a favorite in ES-DE and it appears in your Steam library**, so you can launch it straight from Big Picture / game mode alongside your Steam titles.
 
@@ -113,7 +113,7 @@ Supported systems:
 | Nintendo DS | RetroArch (melonDS) |
 | Nintendo 3DS | Azahar |
 | GameCube / Wii | Dolphin |
-| Nintendo Switch | Eden |
+| Nintendo Switch | Eden or Ryujinx (bring your own build, see below) |
 | Sega Master System / Genesis / Game Gear / Sega CD | RetroArch (Genesis Plus GX) |
 | Sega Saturn | RetroArch (YabaSanshiro) |
 | Sega Dreamcast | RetroArch (Flycast) |
@@ -121,6 +121,14 @@ Supported systems:
 | PlayStation 2 | ARMSX2 |
 | PlayStation Portable | PPSSPP |
 | Arcade / Neo Geo | RetroArch (FBNeo) |
+
+**Bring your own emulator build.** Every standalone emulator has a folder under
+`~/Emulation/emulators/` (`eden`, `ryujinx`, `armsx2`, `rpcs3`, `vita3k`, `xemu`, `dolphin`,
+`cemu`, `azahar`, `ppsspp`). Put one file in it, an AppImage or a binary, and Pocknix launches
+that instead of its own build, from ES-DE and from Steam alike, with the same pre-made
+settings. Remove the file to go back. Pocknix ships no Switch emulator: drop an Eden or
+Ryujinx build into its folder and it comes pre-configured; with both present, pick one in ES-DE
+under Other Settings, Alternative Emulators.
 
 ## Pocknix Control
 

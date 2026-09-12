@@ -159,7 +159,10 @@ def sync(cfgdir: str, desired: list[dict]) -> None:
 
 
 def main() -> None:
-    desired = [make_entry("ES-DE", '"/usr/bin/es-de"')] + favorites()
+    # No ES-DE = the emulation layer is gone: an empty desired set prunes our tiles.
+    desired = []
+    if os.path.exists("/usr/bin/es-de") and os.path.exists(PLAY):
+        desired = [make_entry("ES-DE", '"/usr/bin/es-de"')] + favorites()
     for cfgdir in glob.glob(os.path.join(HOME, ".local/share/Steam/userdata/*/config")):
         if os.path.basename(os.path.dirname(cfgdir)) == "0":
             continue  # anonymous placeholder account

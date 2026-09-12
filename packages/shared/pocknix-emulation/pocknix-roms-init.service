@@ -1,5 +1,3 @@
-# Enabled at image time with `systemctl --global enable`, not by the package: it is a --user
-# unit and there is no user to enable it for at install time.
 [Unit]
 Description=pocknix: create ~/ROMs tree and seed emulator configs on first login
 After=graphical-session-pre.target

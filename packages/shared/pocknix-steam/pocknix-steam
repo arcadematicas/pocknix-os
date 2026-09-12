@@ -56,9 +56,7 @@ fi
 
 # Must stay HERE, before Steam starts: Steam rewrites shortcuts.vdf on exit, so a sync against a
 # live client is clobbered.
-if command -v pocknix-steam-sync >/dev/null 2>&1; then
-  pocknix-steam-sync || echo "[pocknix-steam] Steam-library sync failed (non-fatal)"
-fi
+/usr/bin/pocknix-steam-sync || echo "[pocknix-steam] Steam-library sync failed (non-fatal)"
 
 for _dc in /usr/lib/pocknix/device.conf /etc/pocknix/device.conf; do
   [ -r "${_dc}" ] && . "${_dc}"

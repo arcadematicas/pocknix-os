@@ -154,6 +154,44 @@ do_share() {
   kdialog --title "$TITLE" --msgbox "File sharing is on.\n\nOn another computer, open:\n  smb://pocknix.local${addrs:+  (or smb://${addrs%% *})}\n\nConnect as Guest - there is no password.\nIt stays on until you turn it off here." || true
 }
 
+layer_installed() { [ "$(pocknix-layer status 2>/dev/null | sed -n 's/^installed=//p')" = yes ]; }
+
+do_layer() {
+  if layer_installed; then
+    kdialog --title "$TITLE" --warningcontinuecancel \
+      "Remove the emulation layer?\n\nES-DE, RetroArch and the standalone emulators are uninstalled. Your ROMs, BIOS files, saves and emulator settings are kept, so installing the layer again brings everything back as it was.\n\nClose ES-DE and any emulator first. The ES-DE and favourite tiles in Steam disappear the next time Steam starts." \
+      || return 0
+    konsole_run "/usr/bin/pocknix-layer remove"
+    layer_installed && { gui_err "The emulation layer is still installed. The terminal output says what went wrong."; return 0; }
+    kdialog --title "$TITLE" --msgbox "The emulation layer is removed. Your ROMs and settings are still in place." || true
+    return 0
+  fi
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Install the emulation layer (ES-DE + emulators)?\n\nThis is a large download and runs a full system update first. Everything is ready to use afterwards; no restart needed." \
+    || return 0
+  konsole_run "/usr/bin/pocknix-layer install"
+  layer_installed || { gui_err "The emulation layer is still not installed. The terminal output says what went wrong."; return 0; }
+  kdialog --title "$TITLE" --msgbox "The emulation layer is installed.\n\nES-DE is in the app menu now, and in Steam the next time it starts." || true
+}
+
+emulators_present() { pocknix-roms-init --list 2>/dev/null || true; }
+
+do_defaults() {
+  local rows args=() name label choice out rc=0
+  rows="$(emulators_present)"
+  [ -n "${rows}" ] || { gui_err "No emulators are installed."; return 0; }
+  while IFS=$'\t' read -r name label; do args+=("${name}" "${label}"); done <<< "${rows}"
+  args+=(all "Everything above")
+  choice="$(kdialog --title "$TITLE" --menu "Restore the Pocknix default settings for:" "${args[@]}")" || return 0
+  [ -n "${choice}" ] || return 0
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Restore the default settings for ${choice}?\n\nThe current settings file is kept next to the new one as a .bak-<date> copy. Games, saves and controller profiles are not touched." \
+    || return 0
+  out="$(pocknix-roms-init --reset "${choice}" 2>&1)" || rc=$?
+  [ "${rc}" -eq 0 ] || { gui_err "Restoring defaults failed:\n\n$(printf '%s' "${out}" | tail -3)"; return 0; }
+  kdialog --title "$TITLE" --msgbox "Default settings restored for ${choice}." || true
+}
+
 # terminal on purpose: pocknix-base demands a typed ROLL and streams the pacman run
 konsole_run() { konsole -e /bin/bash -c "pkexec $1; echo; read -rp 'Press Enter to close... '"; }
 
@@ -203,6 +241,9 @@ while :; do
   else items+=(ssh "Remote access (SSH) is off - turn it on..."); fi
   if [ "$(share_state)" = on ]; then items+=(share "File sharing (SMB) is ON - turn it off")
   else items+=(share "File sharing (SMB) is off - turn it on..."); fi
+  if layer_installed; then items+=(emulation "Emulation layer is installed - remove it...")
+  else items+=(emulation "Install the emulation layer (ES-DE + emulators)..."); fi
+  [ -n "$(emulators_present)" ] && items+=(defaults "Restore emulator default settings...")
   choice="$(kdialog --title "$TITLE" --menu "Pocknix maintenance tools\nMode: ${mode^^}" "${items[@]}")" || exit 0
   case "${choice}" in
     rollback)          do_rollback "" ;;
@@ -212,6 +253,8 @@ while :; do
     abl)               do_abl ;;
     ssh)               do_ssh ;;
     share)             do_share ;;
+    emulation)         do_layer ;;
+    defaults)          do_defaults ;;
     status)            do_status ;;
     *) exit 0 ;;
   esac
