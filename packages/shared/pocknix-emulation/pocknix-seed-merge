@@ -4,6 +4,7 @@
 # is decided per key against the seed we last applied (the baseline), never by hashing the file.
 import argparse
 import fnmatch
+import json
 import os
 import re
 import sys
@@ -269,9 +270,76 @@ class XmlDoc:
         return ('<?xml version="1.0" encoding="UTF-8"?>\n' + body + "\n").encode("utf-8")
 
 
+class JsonDoc:
+    """Ryujinx's Config.json: keys are object paths (ui/start_fullscreen), arrays are one
+    list-valued key. Values compare as their JSON text so 1, true and "x" stay typed."""
+
+    def __init__(self, data):
+        self.root = json.loads(data.decode("utf-8"))
+        if not isinstance(self.root, dict):
+            raise ValueError("top level is not an object")
+        self.index()
+
+    def index(self):
+        self.items, self.keys = {}, []
+
+        def walk(obj, path):
+            for k, v in obj.items():
+                p = f"{path}/{k}" if path else k
+                if isinstance(v, dict) and v:
+                    walk(v, p)
+                else:
+                    self.items[p] = (obj, k)
+                    self.keys.append(p)
+
+        walk(self.root, "")
+
+    def order(self):
+        return list(self.keys)
+
+    def get(self, key):
+        item = self.items.get(key)
+        if item is None:
+            return None
+        obj, k = item
+        v = obj[k]
+        if isinstance(v, list):
+            return [json.dumps(x, sort_keys=True) for x in v]
+        return json.dumps(v, sort_keys=True)
+
+    def is_list(self, key):
+        item = self.items.get(key)
+        return item is not None and isinstance(item[0][item[1]], list)
+
+    def _decode(self, value):
+        if isinstance(value, list):
+            return [json.loads(x) for x in value]
+        return json.loads(value)
+
+    def set(self, key, value):
+        obj, k = self.items[key]
+        obj[k] = self._decode(value)
+
+    def add(self, key, seed):
+        parts = key.split("/")
+        obj = self.root
+        for p in parts[:-1]:
+            nxt = obj.get(p)
+            if not isinstance(nxt, dict):
+                nxt = obj[p] = {}
+            obj = nxt
+        obj[parts[-1]] = self._decode(seed.get(key))
+        self.index()
+
+    def serialize(self):
+        return (json.dumps(self.root, indent=2) + "\n").encode("utf-8")
+
+
 def parse(fmt, data):
     if fmt == "xml":
         return XmlDoc(data)
+    if fmt == "json":
+        return JsonDoc(data)
     return LineDoc(data, esxml=(fmt == "esxml"))
 
 
@@ -329,7 +397,7 @@ def class_b(fmt, seed_path, dst, policy_path, mode):
         return
     try:
         seed, target = parse(fmt, seed_data), parse(fmt, cur)
-    except (ET.ParseError, UnicodeDecodeError) as e:
+    except (ET.ParseError, UnicodeDecodeError, ValueError) as e:
         log(dst, f"unparseable ({e}); left alone")
         return
     base_data = read(base_path)
@@ -337,7 +405,7 @@ def class_b(fmt, seed_path, dst, policy_path, mode):
     if base_data is not None:
         try:
             base = parse(fmt, base_data)
-        except (ET.ParseError, UnicodeDecodeError):
+        except (ET.ParseError, UnicodeDecodeError, ValueError):
             base = None
     policy = Policy(policy_path)
     added = updated = kept = 0
@@ -375,7 +443,7 @@ def main():
     global DRY
     ap = argparse.ArgumentParser()
     ap.add_argument("--class", dest="cls", choices=["a", "b"], required=True)
-    ap.add_argument("--format", choices=["ini", "racfg", "esxml", "xml"])
+    ap.add_argument("--format", choices=["ini", "racfg", "esxml", "xml", "json"])
     ap.add_argument("--policy")
     ap.add_argument("--mode", choices=["add-only", "merge"], default="add-only")
     ap.add_argument("--dry-run", action="store_true")

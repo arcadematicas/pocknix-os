@@ -16,14 +16,15 @@ source=('pocknix-roms-init' 'pocknix-roms-init.service' 'pocknix-seed-merge' 'po
         'emu-resolve.sh' 'es-eden' 'es-ryujinx' 'es-armsx2' 'es-dolphin' 'es-psp' 'es-xemu'
         'es-azahar' 'es-rpcs3' 'es-cemu' 'es-vita3k'
         'es_find_rules.xml' 'es_systems.xml' 'retroarch.cfg' 'ROMS-README.txt' 'armsx2-PCSX2.ini.in'
-        'eden-qt-config.ini.in' 'ppsspp.ini.in'
+        'eden-qt-config.ini.in' 'ppsspp.ini.in' 'ryujinx-Config.json.in'
         'cemu-settings.policy' 'armsx2-PCSX2.policy' 'eden-qt-config.policy' 'retroarch.policy' 'es_settings.policy'
+        'ryujinx-Config.policy'
         'pocknix-cemu-profile' 'cemu-settings.xml.in' 'cemu-controller0.xml.in'
         'dolphin-Dolphin.ini.in' 'dolphin-GFX.ini.in' 'dolphin-GCPadNew.ini.in'
         # FLAT names: makepkg cannot retrieve local sources from subdirectory paths, so
         # package() maps retroarch-<Core>-<file> back into the retroarch-config/<Core>/ tree.
         'retroarch-mGBA-gba.cfg' 'retroarch-mGBA-gba.slangp')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-roms-init" "${pkgdir}/usr/bin/pocknix-roms-init"
@@ -63,8 +64,10 @@ package() {
     "${pkgdir}/usr/share/pocknix-emulation/eden-qt-config.ini.in"
   install -Dm644 "${srcdir}/ppsspp.ini.in" \
     "${pkgdir}/usr/share/pocknix-emulation/ppsspp.ini.in"
+  install -Dm644 "${srcdir}/ryujinx-Config.json.in" \
+    "${pkgdir}/usr/share/pocknix-emulation/ryujinx-Config.json.in"
   local pol
-  for pol in cemu-settings armsx2-PCSX2 eden-qt-config retroarch es_settings; do
+  for pol in cemu-settings armsx2-PCSX2 eden-qt-config retroarch es_settings ryujinx-Config; do
     install -Dm644 "${srcdir}/${pol}.policy" "${pkgdir}/usr/share/pocknix-emulation/${pol}.policy"
   done
   install -Dm755 "${srcdir}/pocknix-cemu-profile" "${pkgdir}/usr/lib/pocknix/pocknix-cemu-profile"

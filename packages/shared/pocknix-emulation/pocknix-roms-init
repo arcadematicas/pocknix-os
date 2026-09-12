@@ -52,7 +52,8 @@ have_eden()      { emu_path eden >/dev/null 2>&1; }
 have_dolphin()   { emu_path dolphin >/dev/null 2>&1; }
 have_cemu()      { emu_path cemu >/dev/null 2>&1; }
 have_ppsspp()    { emu_path ppsspp >/dev/null 2>&1; }
-EMULATORS=(esde retroarch armsx2 eden dolphin cemu ppsspp)
+have_ryujinx()   { emu_path ryujinx >/dev/null 2>&1; }
+EMULATORS=(esde retroarch armsx2 eden ryujinx dolphin cemu ppsspp)
 
 TMP="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/pocknix-seed.XXXXXX")" || exit 0
 trap 'rm -rf "${TMP}"' EXIT
@@ -128,6 +129,11 @@ seed_eden() {
   seed_b ini "${TMP}/qt-config.ini" "${HOME}/.config/eden/qt-config.ini" eden-qt-config
 }
 
+seed_ryujinx() {
+  sed "s|__ROMS__|${ROMS}|g" "${SHARE}/ryujinx-Config.json.in" > "${TMP}/Config.json"
+  seed_b json "${TMP}/Config.json" "${HOME}/.config/Ryujinx/Config.json" ryujinx-Config
+}
+
 seed_dolphin() {
   seed_b ini "${SHARE}/dolphin-Dolphin.ini.in" "${HOME}/.config/dolphin-emu/Dolphin.ini"
   seed_b ini "${SHARE}/dolphin-GFX.ini.in"     "${HOME}/.config/dolphin-emu/GFX.ini"
@@ -179,6 +185,7 @@ reset_retroarch() {
 }
 reset_armsx2()    { reset_target "${HOME}/.config/ARMSX2/inis/PCSX2.ini"; }
 reset_eden()      { reset_target "${HOME}/.config/eden/qt-config.ini"; }
+reset_ryujinx()   { reset_target "${HOME}/.config/Ryujinx/Config.json"; }
 reset_dolphin()   { local f; for f in Dolphin.ini GFX.ini GCPadNew.ini; do reset_target "${HOME}/.config/dolphin-emu/${f}"; done; }
 reset_cemu()      { reset_target "${HOME}/.config/Cemu/settings.xml"; }
 reset_ppsspp()    { reset_target "${HOME}/.config/ppsspp/PSP/SYSTEM/ppsspp.ini"; }
