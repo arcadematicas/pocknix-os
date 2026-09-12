@@ -54,7 +54,7 @@ The flashed SD card carries ROCKNIX's install kit in its `rocknix_abl` folder (v
 
 > **Although installing the ROCKNIX ABL is recommended, SM8250 users can boot Pocknix without it**: flash a Pocknix SD, insert it, boot while holding **Volume −**, switch the boot mode, and boot.
 
-> **Newer Retroid Pocket 5 / Flip 2 units (2026 batches, sold as 12 GB) have a different display panel** (Visionox). Pocknix cannot tell the two panels apart before the screen driver runs, so on those units the first boot stays black (you can hear Steam start). Fix: with the SD card in a PC, create an empty file named `visionox` (or `visionox.txt`) in the top folder of the small `POCKNIX` partition, next to `KERNEL`, then boot again. The choice survives updates and installing to internal storage.
+> **Newer Retroid Pocket 5 / Flip 2 units (2026 batches, sold as 12 GB) have a different display panel** (Visionox). Support for it is included but **untested on hardware**. Pocknix cannot tell the two panels apart before the screen driver runs, so on those units the first boot stays black (you can hear Steam start). To try it: with the SD card in a PC, create an empty file named `visionox` (or `visionox.txt`) in the top folder of the small `POCKNIX` partition, next to `KERNEL`, then boot again. If you own one, please report back on [#74](https://github.com/shuuri-labs/pocknix-os/issues/74).
 
 ## How to update
 
