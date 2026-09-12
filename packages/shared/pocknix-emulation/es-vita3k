@@ -1,5 +1,7 @@
 #!/bin/bash
 # ES-DE launch wrapper; es-armsx2 explains why the pin lives here.
+. /usr/lib/pocknix/emu-resolve.sh
+exe="$(emu_path vita3k)" || emu_missing vita3k
 [ -r /usr/lib/pocknix/device.conf ] && . /usr/lib/pocknix/device.conf
 [ -r /etc/pocknix/device.conf ] && . /etc/pocknix/device.conf
-exec taskset -c "${POCKNIX_BIG_CORES:-3-7}" /opt/pocknix/emulators/vita3k/Vita3K.AppImage "$@"
+exec taskset -c "${POCKNIX_BIG_CORES:-3-7}" "${exe}" "$@"

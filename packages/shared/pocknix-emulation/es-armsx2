@@ -3,6 +3,8 @@
 # wrappers instead: the big-core pin has to live here too, or unpinned emulator threads land
 # on a little core (chop + audio crackle). The /opt AppImages are also not in PATH, so this
 # is ES-DE's only route to them.
+. /usr/lib/pocknix/emu-resolve.sh
+exe="$(emu_path armsx2)" || emu_missing armsx2
 [ -r /usr/lib/pocknix/device.conf ] && . /usr/lib/pocknix/device.conf
 [ -r /etc/pocknix/device.conf ] && . /etc/pocknix/device.conf
-exec taskset -c "${POCKNIX_BIG_CORES:-3-7}" /opt/pocknix/emulators/armsx2/ARMSX2.AppImage "$@"
+exec taskset -c "${POCKNIX_BIG_CORES:-3-7}" "${exe}" "$@"

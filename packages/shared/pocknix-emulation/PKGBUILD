@@ -13,7 +13,7 @@ license=('GPL2')
 depends=('bash')
 install=pocknix-emulation.install
 source=('pocknix-roms-init' 'pocknix-roms-init.service' 'pocknix-seed-merge' 'pocknix-play'
-        'es-eden' 'es-armsx2' 'es-dolphin' 'es-psp' 'es-xemu'
+        'emu-resolve.sh' 'es-eden' 'es-ryujinx' 'es-armsx2' 'es-dolphin' 'es-psp' 'es-xemu'
         'es-azahar' 'es-rpcs3' 'es-cemu' 'es-vita3k'
         'es_find_rules.xml' 'es_systems.xml' 'retroarch.cfg' 'ROMS-README.txt' 'armsx2-PCSX2.ini.in'
         'eden-qt-config.ini.in' 'ppsspp.ini.in'
@@ -23,14 +23,16 @@ source=('pocknix-roms-init' 'pocknix-roms-init.service' 'pocknix-seed-merge' 'po
         # FLAT names: makepkg cannot retrieve local sources from subdirectory paths, so
         # package() maps retroarch-<Core>-<file> back into the retroarch-config/<Core>/ tree.
         'retroarch-mGBA-gba.cfg' 'retroarch-mGBA-gba.slangp')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-roms-init" "${pkgdir}/usr/bin/pocknix-roms-init"
   install -Dm755 "${srcdir}/pocknix-seed-merge" "${pkgdir}/usr/lib/pocknix/pocknix-seed-merge"
   install -Dm755 "${srcdir}/pocknix-play"      "${pkgdir}/usr/bin/pocknix-play"
 
+  install -Dm644 "${srcdir}/emu-resolve.sh" "${pkgdir}/usr/lib/pocknix/emu-resolve.sh"
   install -Dm755 "${srcdir}/es-eden"    "${pkgdir}/usr/lib/pocknix/es-eden"
+  install -Dm755 "${srcdir}/es-ryujinx" "${pkgdir}/usr/lib/pocknix/es-ryujinx"
   install -Dm755 "${srcdir}/es-armsx2"  "${pkgdir}/usr/lib/pocknix/es-armsx2"
   install -Dm755 "${srcdir}/es-psp"     "${pkgdir}/usr/lib/pocknix/es-psp"
   install -Dm755 "${srcdir}/es-xemu"    "${pkgdir}/usr/lib/pocknix/es-xemu"

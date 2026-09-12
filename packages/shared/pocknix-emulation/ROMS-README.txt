@@ -23,13 +23,22 @@ matching subfolder and they are picked up automatically the next time ES-DE star
    If a game won't boot, it's usually a missing or misnamed BIOS — the emulator's
    error message names the exact file it wants.
 
-3. NINTENDO SWITCH KEYS + FIRMWARE
-   Switch emulation needs your own keys and firmware. Eden uses its own folders,
-   not BIOS/:
-     keys:     prod.keys + title.keys  ->  ~/.local/share/eden/keys/
-     firmware: the .nca files          ->  ~/.local/share/eden/nand/system/Contents/registered/
+3. NINTENDO SWITCH
+   Pocknix ships no Switch emulator. Drop your own Eden or Ryujinx build in (section 5)
+   and it is set up for you: controller, fullscreen, vsync and resolution come
+   pre-configured. Both need your own keys and firmware, in their own folders (not BIOS/):
+     Eden:     keys prod.keys + title.keys -> ~/.local/share/eden/keys/
+               firmware .nca files          -> ~/.local/share/eden/nand/system/Contents/registered/
+     Ryujinx:  keys -> ~/.config/Ryujinx/system/    firmware: install it from Ryujinx's own menu
+   With both dropped in, pick which one runs in ES-DE: Other Settings -> Alternative Emulators.
 
-4. GET IT INTO YOUR STEAM LIBRARY
+4. YOUR OWN EMULATOR BUILDS -> ~/Emulation/emulators/<name>/
+   Every standalone emulator has a folder here. Put ONE file in it (an AppImage or a
+   binary) and Pocknix launches that instead of its own build, from ES-DE and from Steam
+   alike, with the same pre-made settings. Remove the file to go back to the built-in one.
+   Folders: eden, ryujinx, armsx2, rpcs3, vita3k, xemu, dolphin, cemu, azahar, ppsspp.
+
+5. GET IT INTO YOUR STEAM LIBRARY
    In ES-DE, press the Favorite button on any game to star it. Starred games are
    added to your Steam library automatically (in a "Pocknix" collection) — no manual
    setup. Un-star to remove it again. New/removed favorites appear next time you

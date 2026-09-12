@@ -5,8 +5,8 @@ set -u
 
 SHARE=/usr/share/pocknix-emulation
 MERGE=/usr/lib/pocknix/pocknix-seed-merge
-EMUS=/opt/pocknix/emulators
 EMU="${HOME}/Emulation"
+. /usr/lib/pocknix/emu-resolve.sh
 MODE=merge
 STATE="${XDG_STATE_HOME:-${HOME}/.local/state}"
 
@@ -47,11 +47,11 @@ SYSTEMS=(
 
 have_esde()      { command -v es-de >/dev/null 2>&1; }
 have_retroarch() { command -v retroarch >/dev/null 2>&1; }
-have_armsx2()    { [ -x "${EMUS}/armsx2/ARMSX2.AppImage" ]; }
-have_eden()      { [ -x "${EMUS}/eden/Eden.AppImage" ]; }
-have_dolphin()   { command -v dolphin-emu >/dev/null 2>&1; }
-have_cemu()      { command -v Cemu >/dev/null 2>&1; }
-have_ppsspp()    { command -v PPSSPPSDL >/dev/null 2>&1 || command -v ppsspp >/dev/null 2>&1; }
+have_armsx2()    { emu_path armsx2 >/dev/null 2>&1; }
+have_eden()      { emu_path eden >/dev/null 2>&1; }
+have_dolphin()   { emu_path dolphin >/dev/null 2>&1; }
+have_cemu()      { emu_path cemu >/dev/null 2>&1; }
+have_ppsspp()    { emu_path ppsspp >/dev/null 2>&1; }
 EMULATORS=(esde retroarch armsx2 eden dolphin cemu ppsspp)
 
 TMP="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/pocknix-seed.XXXXXX")" || exit 0
@@ -151,12 +151,15 @@ seed_ppsspp() {
 
 # ROMS was read before any reset, so restoring ES-DE defaults keeps the user's ROM location
 label() {
+  local l own=""
   case "$1" in
-    esde) echo "ES-DE frontend" ;;          retroarch) echo "RetroArch" ;;
-    armsx2) echo "ARMSX2 (PS2)" ;;          eden) echo "Eden (Switch)" ;;
-    dolphin) echo "Dolphin (GameCube/Wii)" ;; cemu) echo "Cemu (Wii U)" ;;
-    ppsspp) echo "PPSSPP (PSP)" ;;
+    esde) l="ES-DE frontend" ;;          retroarch) l="RetroArch" ;;
+    armsx2) l="ARMSX2 (PS2)" ;;          eden) l="Eden (Switch)" ;;
+    dolphin) l="Dolphin (GameCube/Wii)" ;; cemu) l="Cemu (Wii U)" ;;
+    ppsspp) l="PPSSPP (PSP)" ;;          ryujinx) l="Ryujinx (Switch)" ;;
   esac
+  case "$(emu_path "$1" 2>/dev/null)" in "${EMU_DROP}"/*) own=" - your own build" ;; esac
+  echo "${l}${own}"
 }
 STAMP="$(date +%Y%m%d-%H%M%S)"
 reset_target() {  # $1 target file
@@ -202,6 +205,7 @@ esac
 
 mkdir -p "${EMU}/BIOS" "${EMU}/Saves" "${EMU}/States"
 for s in "${SYSTEMS[@]}"; do mkdir -p "${ROMS}/${s}"; done
+for e in ${EMU_NAMES}; do mkdir -p "${EMU_DROP}/${e}"; done
 # refreshed every run so doc updates reach existing installs
 [ -f "${SHARE}/ROMS-README.txt" ] && cp -f "${SHARE}/ROMS-README.txt" "${EMU}/README.txt" 2>/dev/null
 

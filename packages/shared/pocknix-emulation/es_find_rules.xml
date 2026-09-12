@@ -82,11 +82,15 @@
     </rule>
   </emulator>
 
-  <!-- Switch. First entry is the big-core pin wrapper. -->
+  <!-- Switch: not shipped; the wrappers resolve the user's drop-in build (emu-resolve.sh) -->
   <emulator name="EDEN">
     <rule type="staticpath">
       <entry>/usr/lib/pocknix/es-eden</entry>
-      <entry>/opt/pocknix/emulators/eden/Eden.AppImage</entry>
+    </rule>
+  </emulator>
+  <emulator name="RYUJINX">
+    <rule type="staticpath">
+      <entry>/usr/lib/pocknix/es-ryujinx</entry>
     </rule>
   </emulator>
 

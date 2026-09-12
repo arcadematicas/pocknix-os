@@ -17,7 +17,7 @@ fi
 [ -r /etc/pocknix/device.conf ] && . /etc/pocknix/device.conf
 _big_cores="${POCKNIX_BIG_CORES:-3-7}"
 
-EMUS=/opt/pocknix/emulators
+. /usr/lib/pocknix/emu-resolve.sh
 CORES=/usr/lib/libretro
 
 run_core() {
@@ -26,14 +26,21 @@ run_core() {
   exec retroarch -f -L "${core}" "${rom}"
 }
 
-run_appimage() {  # $1 = path under EMUS; remaining args = emulator flags (rom appended by caller)
-  local app="${EMUS}/$1"; shift
-  [ -x "${app}" ] || { echo "pocknix-play: emulator missing: ${app}" >&2; exit 1; }
-  # Steam injects LD_PRELOAD (gameoverlayrenderer.so) + its runtime LD_LIBRARY_PATH into
-  # shortcuts: AppImages with bundled Qt SIGABRT on that mix, and their runtime then cannot
-  # find fusermount via PATH. System binaries tolerate it, so only this tier scrubs.
-  exec env -u LD_PRELOAD -u LD_LIBRARY_PATH FUSERMOUNT_PROG=/usr/bin/fusermount \
-    ${_pin:-} "${app}" "$@"
+run_emu() {  # $1 = emulator name; remaining args = emulator flags (rom appended by caller)
+  local app; app="$(emu_path "$1")" || emu_missing "$1"; shift
+  case "${app}" in
+    *.AppImage|*.appimage)
+      # Steam injects LD_PRELOAD + its runtime LD_LIBRARY_PATH into shortcuts: AppImages with
+      # bundled Qt SIGABRT on that mix and then cannot find fusermount via PATH.
+      exec env -u LD_PRELOAD -u LD_LIBRARY_PATH FUSERMOUNT_PROG=/usr/bin/fusermount \
+        taskset -c "${_big_cores}" "${app}" "$@" ;;
+    *) exec taskset -c "${_big_cores}" "${app}" "$@" ;;
+  esac
+}
+
+# ES-DE records the per-system alternative emulator in the gamelist; the Steam tile must match.
+esde_alt_emulator() {  # $1 system -> prints the label, or nothing
+  sed -n 's/.*<label>\(.*\)<\/label>.*/\1/p' "${HOME}/ES-DE/gamelists/$1/gamelist.xml" 2>/dev/null | head -1
 }
 
 case "${system}" in
@@ -60,39 +67,24 @@ case "${system}" in
   ngp|ngpc)                             run_core mednafen_ngp ;;
   virtualboy)                           run_core mednafen_vb ;;
 
-  psp)
-    # the binary is renamed across ppsspp versions.
-    for b in ppsspp PPSSPPSDL; do
-      command -v "$b" >/dev/null 2>&1 && exec taskset -c "${_big_cores}" "$b" --fullscreen "${rom}"
-    done
-    echo "pocknix-play: ppsspp not installed" >&2; exit 1 ;;
-  gc|wii)
-    command -v dolphin-emu >/dev/null 2>&1 || { echo "pocknix-play: dolphin-emu not installed" >&2; exit 1; }
-    exec taskset -c "${_big_cores}" dolphin-emu -b -e "${rom}" ;;
-  ps2)
-    _pin="taskset -c ${_big_cores}"
-    run_appimage armsx2/ARMSX2.AppImage -batch -fullscreen -- "${rom}" ;;
-  ps3)
-    _pin="taskset -c ${_big_cores}"
-    run_appimage rpcs3/rpcs3.AppImage --no-gui "${rom}" ;;
+  psp)        run_emu ppsspp --fullscreen "${rom}" ;;
+  gc|wii)     run_emu dolphin -b -e "${rom}" ;;
+  ps2)        run_emu armsx2 -batch -fullscreen -- "${rom}" ;;
+  ps3)        run_emu rpcs3 --no-gui "${rom}" ;;
+  xbox)       run_emu xemu -full-screen -dvd_path "${rom}" ;;
+  n3ds|3ds)   run_emu azahar "${rom}" ;;
   switch)
-    _pin="taskset -c ${_big_cores}"
-    run_appimage eden/Eden.AppImage -f -g "${rom}" ;;
-  xbox)
-    _pin="taskset -c ${_big_cores}"
-    run_appimage xemu/xemu.AppImage -full-screen -dvd_path "${rom}" ;;
-  n3ds|3ds)
-    command -v azahar >/dev/null 2>&1 || { echo "pocknix-play: azahar not installed" >&2; exit 1; }
-    exec taskset -c "${_big_cores}" azahar "${rom}" ;;
+    case "$(esde_alt_emulator switch)" in
+      *Ryujinx*) run_emu ryujinx "${rom}" ;;
+      *)         run_emu eden -f -g "${rom}" ;;
+    esac ;;
   psvita)
     # Vita3K -r wants the title id = the ROM's basename (what ES-DE's %BASENAME% passes)
-    _pin="taskset -c ${_big_cores}"
     _id="${rom##*/}"; _id="${_id%.*}"
-    run_appimage vita3k/Vita3K.AppImage -r "${_id}" ;;
+    run_emu vita3k -r "${_id}" ;;
   wiiu)
-    command -v Cemu >/dev/null 2>&1 || { echo "pocknix-play: cemu not installed" >&2; exit 1; }
     /usr/lib/pocknix/pocknix-cemu-profile 2>/dev/null || true   # pad GUID differs per session
-    exec taskset -c "${_big_cores}" Cemu -f -g "${rom}" ;;
+    run_emu cemu -f -g "${rom}" ;;
 
   *)
     echo "pocknix-play: unknown system '${system}' (see /usr/bin/pocknix-play for the mapping)" >&2
