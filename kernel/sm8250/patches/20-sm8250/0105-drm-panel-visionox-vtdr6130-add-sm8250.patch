@@ -1,3 +1,4 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Jacob Pyke <github@pyk.ee>
 Date: Thu, 27 Aug 2026 21:27:32 +1000
 Subject: [PATCH] drm/panel: visionox-vtdr6130-cog: add sm8250 support
@@ -23,33 +24,37 @@ pocknix: armada-packages 0104a (armada-os/armada#327), also ROCKNIX SM8250
 the 60Hz timing (the product rate) exposed as the single mode, so the
 prepare()-time mode guess cannot race (same reason as sm8550 patch 1021).
 ---
+ .../drm/panel/panel-visionox-vtdr6130-cog.c   | 94 ++++++++++++++++++++----
+ 1 file changed, 81 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/gpu/drm/panel/panel-visionox-vtdr6130-cog.c b/drivers/gpu/drm/panel/panel-visionox-vtdr6130-cog.c
+index e9766ab..1a1db84 100644
 --- a/drivers/gpu/drm/panel/panel-visionox-vtdr6130-cog.c
 +++ b/drivers/gpu/drm/panel/panel-visionox-vtdr6130-cog.c
-@@ -48,10 +48,22 @@
+@@ -48,9 +48,21 @@ struct panel_desc {
  	int (*init_sequence)(struct panel_info *pinfo);
  
  	struct drm_dsc_config dsc;
 +
 +	const struct regulator_bulk_data *supplies;
 +	unsigned int num_supplies;
- };
- 
--static const struct regulator_bulk_data panel_supplies[] = {
++};
++
 +/* SM8250 regulators */
 +static const struct regulator_bulk_data sm8250_panel_supplies[] = {
 +	{ .supply = "vdd1v2" },
 +	{ .supply = "vddio" },
- 	{ .supply = "vdd" },
++	{ .supply = "vdd" },
 +	{ .supply = "avdd" },
-+};
-+
+ };
+ 
+-static const struct regulator_bulk_data panel_supplies[] = {
 +/* SM8550 regulators */
 +static const struct regulator_bulk_data sm8550_panel_supplies[] = {
-+	{ .supply = "vdd" },
+ 	{ .supply = "vdd" },
  	{ .supply = "vddio" },
  	{ .supply = "vci" },
- 	{ .supply = "vdd18" },
-@@ -143,7 +155,7 @@
+@@ -143,7 +155,7 @@ static int vtdr6130_rp6_init_sequence(struct panel_info *pinfo)
  					0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
  	}
  
@@ -58,27 +63,10 @@ prepare()-time mode guess cannot race (same reason as sm8550 patch 1021).
  
  	mipi_dsi_generic_write_seq_multi(&dsi_ctx, 0xB1, 
  				0x02, 0x16, 0x00, 0x14, 0x00, 0x1C, 0x00, 0x02,
-@@ -232,6 +244,59 @@
- static struct panel_desc vtdr6130_rp6_desc = {
- 	.modes = vtdr6130_rp6_modes,
- 	.num_modes = ARRAY_SIZE(vtdr6130_rp6_modes),
-+	.width_mm = 120,
-+	.height_mm = 68,
-+	.bpc = 8,
-+	.lanes = 4,
-+	.format = MIPI_DSI_FMT_RGB888,
-+	.mode_flags =  MIPI_DSI_MODE_NO_EOT_PACKET | MIPI_DSI_CLOCK_NON_CONTINUOUS | MIPI_DSI_MODE_LPM,
-+	.init_sequence = vtdr6130_rp6_init_sequence,
-+	.dsc = {
-+		.dsc_version_major = 0x1,
-+		.dsc_version_minor = 0x1,
-+		.slice_height = 12,
-+		.slice_width = 540,
-+		.slice_count = 2,
-+		.bits_per_component = 8,
-+		.bits_per_pixel = 8 << 4,
-+		.block_pred_enable = true,
-+	},
+@@ -249,6 +261,61 @@ static struct panel_desc vtdr6130_rp6_desc = {
+ 		.bits_per_pixel = 8 << 4,
+ 		.block_pred_enable = true,
+ 	},
 +	.supplies = sm8550_panel_supplies,
 +	.num_supplies = ARRAY_SIZE(sm8550_panel_supplies),
 +};
@@ -115,19 +103,29 @@ prepare()-time mode guess cannot race (same reason as sm8550 patch 1021).
 +	.modes = vtdr6130_sm8250_modes,
 +	/* 60Hz only: init_sequence guesses the mode at prepare(), two modes race (see sm8550 1021). */
 +	.num_modes = 1,
- 	.width_mm = 120,
- 	.height_mm = 68,
- 	.bpc = 8,
-@@ -249,6 +314,8 @@
- 		.bits_per_pixel = 8 << 4,
- 		.block_pred_enable = true,
- 	},
++	.width_mm = 120,
++	.height_mm = 68,
++	.bpc = 8,
++	.lanes = 4,
++	.format = MIPI_DSI_FMT_RGB888,
++	.mode_flags =  MIPI_DSI_MODE_NO_EOT_PACKET | MIPI_DSI_CLOCK_NON_CONTINUOUS | MIPI_DSI_MODE_LPM,
++	.init_sequence = vtdr6130_rp6_init_sequence,
++	.dsc = {
++		.dsc_version_major = 0x1,
++		.dsc_version_minor = 0x1,
++		.slice_height = 12,
++		.slice_width = 540,
++		.slice_count = 2,
++		.bits_per_component = 8,
++		.bits_per_pixel = 8 << 4,
++		.block_pred_enable = true,
++	},
 +	.supplies = sm8250_panel_supplies,
 +	.num_supplies = ARRAY_SIZE(sm8250_panel_supplies),
  };
  
  static void vtdr6130_reset(struct panel_info *pinfo)
-@@ -266,7 +333,7 @@
+@@ -266,7 +333,7 @@ static int vtdr6130_prepare(struct drm_panel *panel)
  	struct panel_info *pinfo = to_panel_info(panel);
  	int ret;
  
@@ -136,7 +134,7 @@ prepare()-time mode guess cannot race (same reason as sm8550 patch 1021).
  	if (ret < 0) {
  		dev_err(panel->dev, "failed to enable regulators: %d\n", ret);
  		return ret;
-@@ -276,7 +343,7 @@
+@@ -276,7 +343,7 @@ static int vtdr6130_prepare(struct drm_panel *panel)
  
  	ret = pinfo->desc->init_sequence(pinfo);
  	if (ret < 0) {
@@ -145,7 +143,7 @@ prepare()-time mode guess cannot race (same reason as sm8550 patch 1021).
  		dev_err(panel->dev, "failed to initialize panel: %d\n", ret);
  		return ret;
  	}
-@@ -304,7 +371,7 @@
+@@ -304,7 +371,7 @@ static int vtdr6130_unprepare(struct drm_panel *panel)
  	struct panel_info *pinfo = to_panel_info(panel);
  
  	gpiod_set_value_cansleep(pinfo->reset_gpio, 1);
@@ -154,7 +152,7 @@ prepare()-time mode guess cannot race (same reason as sm8550 patch 1021).
  
  	return 0;
  }
-@@ -432,20 +499,19 @@
+@@ -432,20 +499,19 @@ static int vtdr6130_probe(struct mipi_dsi_device *dsi)
  	if (IS_ERR(pinfo))
  		return PTR_ERR(pinfo);
  
@@ -182,7 +180,7 @@ prepare()-time mode guess cannot race (same reason as sm8550 patch 1021).
  	pinfo->dsi = dsi;
  	mipi_dsi_set_drvdata(dsi, pinfo);
  
-@@ -481,6 +547,8 @@
+@@ -481,6 +547,8 @@ static int vtdr6130_probe(struct mipi_dsi_device *dsi)
  
  static const struct of_device_id vtdr6130_of_match[] = {
  	{ .compatible = "vtdr6130,rp6", .data = &vtdr6130_rp6_desc },
