@@ -8,7 +8,7 @@ For the full list of supported systems, see the [README](../README.md#emulation)
 
 ## Installing it
 
-Emulation is optional, so a fresh install does not have it. Switch to desktop mode, open
+As of v0.4 emulation is optional, so a fresh install does not have it. Switch to desktop mode, open
 **Pocknix Tools** and pick *Install the emulation layer (ES-DE + emulators)*. It is a large
 download; everything is ready when it finishes, with no restart or logout needed.
 
