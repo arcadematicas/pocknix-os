@@ -113,7 +113,7 @@ Supported systems:
 | Nintendo DS | RetroArch (melonDS) |
 | Nintendo 3DS | Azahar |
 | GameCube / Wii | Dolphin |
-| Nintendo Switch | Eden |
+| Nintendo Switch | Eden or Ryujinx (bring your own build, see below) |
 | Sega Master System / Genesis / Game Gear / Sega CD | RetroArch (Genesis Plus GX) |
 | Sega Saturn | RetroArch (YabaSanshiro) |
 | Sega Dreamcast | RetroArch (Flycast) |
@@ -121,6 +121,14 @@ Supported systems:
 | PlayStation 2 | ARMSX2 |
 | PlayStation Portable | PPSSPP |
 | Arcade / Neo Geo | RetroArch (FBNeo) |
+
+**Bring your own emulator build.** Every standalone emulator has a folder under
+`~/Emulation/emulators/` (`eden`, `ryujinx`, `armsx2`, `rpcs3`, `vita3k`, `xemu`, `dolphin`,
+`cemu`, `azahar`, `ppsspp`). Put one file in it, an AppImage or a binary, and Pocknix launches
+that instead of its own build, from ES-DE and from Steam alike, with the same pre-made
+settings. Remove the file to go back. Pocknix ships no Switch emulator: drop an Eden or
+Ryujinx build into its folder and it comes pre-configured; with both present, pick one in ES-DE
+under Other Settings, Alternative Emulators.
 
 ## Pocknix Control
 
