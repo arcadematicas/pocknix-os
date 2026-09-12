@@ -1,10 +1,19 @@
 # Emulation
 
-pocknix-os ships **ES-DE** as the frontend, with RetroArch and a few standalone emulators doing
+pocknix-os offers **ES-DE** as the frontend, with RetroArch and a few standalone emulators doing
 the work. It is "drop your files in and play": no per-emulator setup, and games you favorite in
 ES-DE show up in your Steam library automatically.
 
 For the full list of supported systems, see the [README](../README.md#emulation).
+
+## Installing it
+
+Emulation is optional, so a fresh install does not have it. Switch to desktop mode, open
+**Pocknix Tools** and pick *Install the emulation layer (ES-DE + emulators)*. It is a large
+download; everything is ready when it finishes, with no restart or logout needed.
+
+The same entry removes the layer again. Your ROMs, BIOS files, saves and emulator settings stay
+where they are, so installing it again later picks up exactly where you left off.
 
 ## Where your files go
 

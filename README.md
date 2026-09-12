@@ -93,7 +93,7 @@ Additional options worth trying are **Proton-GE 11 (ARM64)** and **Proton-CachyO
 
 ## Emulation
 
-pocknix-os ships **ES-DE** (EmulationStation Desktop Edition) with a set of preconfigured emulators. Drop your ROMs into `~/Emulation` and they show up ready to play, no per-emulator setup needed.
+pocknix-os offers **ES-DE** (EmulationStation Desktop Edition) with a set of preconfigured emulators. It is not installed out of the box: open **Pocknix Tools** in desktop mode and pick *Install the emulation layer*, and everything below is downloaded and set up. Drop your ROMs into `~/Emulation` and they show up ready to play, no per-emulator setup needed. The same entry removes it again, keeping your ROMs, saves and settings.
 
 **Star a game as a favorite in ES-DE and it appears in your Steam library**, so you can launch it straight from Big Picture / game mode alongside your Steam titles.
 
