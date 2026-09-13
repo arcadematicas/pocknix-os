@@ -274,6 +274,12 @@ install_packages() {
 # profile (FW_SRC_REL). It's a large synced vendor blob, so installed directly
 # here rather than packaged (could become pocknix-firmware-<soc> later).
 FW_SRC="${VENDOR_DIR}/${FW_SRC_REL}"
+# ROCKNIX/extra-firmware (SM8750/): the Odin 3 blobs upstream linux-firmware
+# lacks — ath12k WCN7860 hw2.0, the board-namespaced ADSP/CDSP
+# (qcom/sm8750/ayn/odin3/), the audio topology (SM8750-AYN-tplg.bin) and the
+# ADSP .jsn configs. Populated into vendor/ by `make sync` (pinned commit, see
+# scripts/sync.sh). Used for SM8750 only.
+FW_EXTRA_SRC="${VENDOR_DIR}/${FW_EXTRA_SRC_REL}"
 install_firmware() {
   local root="$1"
   if [ -d "${FW_SRC}" ] && [ -n "$(ls -A "${FW_SRC}" 2>/dev/null)" ]; then
@@ -282,11 +288,21 @@ install_firmware() {
     # --chown=root:root: the vendor firmware tree is owned by the host build user (uid 1000); plain
     # rsync -a would bake that into the rootfs as 'alarm'-owned firmware (and re-own /usr). Force root.
     rsync -a --chown=root:root "${FW_SRC}/" "${root}/usr/lib/firmware/"
+elif [ "${SOC}" = "sm8750" ]; then
+    # ROCKNIX ships no kernel-overlays firmware for SM8750, and upstream
+    # linux-firmware has NONE of the Odin 3 blobs (ath12k WCN7860, ADSP/CDSP,
+    # audio topology) — they come from ROCKNIX/extra-firmware (SM8750/),
+    # populated into vendor/ by `make sync`. Mandatory: without them the Odin 3
+    # has no WiFi, no ADSP/CDSP and no sound card.
+    install_extra_firmware "${root}"
   elif [ "${SOC}" = "sm8250" ]; then
     # Expected: ROCKNIX ships NO firmware overlay for SM8250 — every blob in
-    # kernel/sm8250/config/kernel-firmware.dat (a650 GPU, adsp/cdsp, ath11k,
-    # BT) comes from upstream linux-firmware, which ALARM's linux-firmware/
-    # linux-firmware-qcom packages already put in the rootfs.
+    # kernel/<soc>/config/kernel-firmware.dat (a650 GPU, adsp/cdsp, ath11k,
+    # BT, ...) comes from upstream linux-firmware, which ALARM's
+    # linux-firmware/linux-firmware-qcom packages already put in the rootfs.
+    # (ROCKNIX now builds its per-device blobs into the kernel via
+    # CONFIG_EXTRA_FIRMWARE instead of shipping a rootfs overlay, so the
+    # kernel-overlays path the profile points at no longer exists upstream.)
     log "no ${SOC} firmware overlay (expected: all blobs come from ALARM linux-firmware packages)"
   else
     # Fatal, not a warn: this shipped an image with dead wifi/audio/battery once
@@ -306,6 +322,20 @@ install_firmware() {
     log "applying pocknix firmware overrides -> rootfs /usr/lib/firmware ($(du -sh "${fw_override}" | cut -f1))"
     mkdir -p "${root}/usr/lib/firmware"
     rsync -a --chown=root:root "${fw_override}/" "${root}/usr/lib/firmware/"
+  fi
+}
+
+# Install the ROCKNIX extra-firmware tree (SM8750/) into the rootfs. Fatal if
+# absent: a silent skip shipped an image with dead wifi/audio once (fresh
+# worktree, gitignored vendor/ absent).
+install_extra_firmware() {
+  local root="$1"
+  if [ -d "${FW_EXTRA_SRC}" ] && [ -n "$(ls -A "${FW_EXTRA_SRC}" 2>/dev/null)" ]; then
+    log "installing ROCKNIX extra-firmware (SM8750) -> rootfs /usr/lib/firmware ($(du -sh "${FW_EXTRA_SRC}" | cut -f1))"
+    mkdir -p "${root}/usr/lib/firmware"
+    rsync -a --chown=root:root "${FW_EXTRA_SRC}/" "${root}/usr/lib/firmware/"
+  else
+    die "ROCKNIX extra-firmware not at ${FW_EXTRA_SRC} — run 'make sync' (populates vendor/rocknix-extra-firmware/ from ROCKNIX/extra-firmware, pinned commit 30c56e2). Without it the Odin 3 has no WiFi (ath12k WCN7860), no ADSP/CDSP and no audio."
   fi
 }
 
