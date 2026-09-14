@@ -81,7 +81,8 @@ install_local_packages() {
     pocknix-shared/pocknix-core \
     pocknix-shared/pocknix-steam-full \
     pocknix-shared/pocknix-desktop-full \
-    pocknix-shared/pocknix-emulation-full
+    pocknix-shared/deckstation-arm \
+    pocknix-shared/wproton-arm
   # GUARD: these local builds MUST come from [pocknix], not silently fall back / go missing. gamescope
   # especially: ALARM's vanilla lacks --use-rotation-shader and black-screens on the RP6 (bitten 3x).
   local mesa_ver; mesa_ver="$(chroot "${root}" pacman -Q mesa 2>/dev/null | awk '{print $2}')"
@@ -104,15 +105,10 @@ install_local_packages() {
   chroot "${root}" pacman -Q pocknix-desktop >/dev/null 2>&1 || {
     die "pocknix-desktop not installed — its local build wasn't in [pocknix]. Build it: 'make packages PKG=pocknix-desktop', confirm build/localrepo/pocknix-desktop-*.pkg.tar.* exists, then re-run."
   }
-  # Source-built emulators are optdepends of pocknix-emulation-full, installed
-  # OPTIONAL-warn here (first-ever aarch64 builds = likeliest to fail; a missing
-  # one just leaves that system out of ES-DE, which degrades gracefully) — don't
-  # fail the whole image over 3DS/GameCube/WiiU.
-  local oe
-  for oe in dolphin-emu azahar cemu; do
-    chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
-      || warn "optional emulator ${oe} not in [pocknix-shared] (build failed/skipped?) — image ships WITHOUT it"
-  done
+  # Emulation is NOT bundled anymore: DeckStation (deckstation-arm, stshunz's
+  # standalone project) is the emulation layer and downloads its own emulators on
+  # demand via `deckstation-setup` (opt-in, never at boot). Same for WProton
+  # (wproton-arm) for Windows games.
   # Kernel: swap ALARM's generic linux-aarch64 for our SoC kernel package (Image + modules,
   # built by `make kernel` -> staged into the package). Its own step (not bundled above) so a
   # missing kernel build errors clearly, and the replace is deterministic. `provides=linux`.

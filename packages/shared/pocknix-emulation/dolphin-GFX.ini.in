@@ -1,6 +1,0 @@
-# Dolphin graphics seed (-> ~/.config/dolphin-emu/GFX.ini). 2x = 960p on the 1080p panels.
-# ShaderCompilationMode 3 (async, skip drawing): the default synchronous compile stalls whole
-# frames on every first-seen effect, at the cost of brief object pop-in.
-[Settings]
-InternalResolution = 2
-ShaderCompilationMode = 3

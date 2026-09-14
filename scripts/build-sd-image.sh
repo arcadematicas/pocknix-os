@@ -155,6 +155,10 @@ EOF
   # One chown covers everything under /home/deck: the XDG dirs just made, the overlay's .bash_profile/
   # .config, AND the Steam tree pre-extracted into it by build-image.sh (all root-owned until now).
   chroot "${root}" chown -R deck:deck /home/deck
+  # DeckStation (emulation) and WProton (Windows games) live in /opt and must be writable by
+  # the deck session: `deckstation-setup` downloads emulators into /opt/deckstation/Apps and
+  # WProton creates runtime/profiles/games under its own base dir.
+  chroot "${root}" chown -R deck:deck /opt/deckstation /opt/wproton 2>/dev/null || true
   # NB: the native Steam client is already pre-extracted into /home/deck by build-image.sh's
   # bootstrap_steam_seed (done there so `du -sm ROOTFS_DIR` above sizes the partition to fit the
   # ~1.3 GB tree). The chown above (root -> deck) is what gives deck ownership of it. Guard: the
@@ -308,9 +312,6 @@ EOF
   chroot "${root}" systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service \
         pocknix-proton-prep.service \
         >/dev/null 2>&1 || true
-  # Emulation first-login seeding: ~/ROMs tree + ES-DE/RetroArch/SRM configs (pocknix-emulation;
-  # idempotent oneshot, never blocks the session).
-  chroot "${root}" systemctl --global enable pocknix-roms-init.service >/dev/null 2>&1 || true
 }
 
 main() {

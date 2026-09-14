@@ -1,4 +1,0 @@
-# pocknix PPSSPP seed (partial; PPSSPP fills the rest on first run). PSP native is 480x272, so
-# 4x = 1920x1088 for the 1080p panels; the "auto" default scales inconsistently when rotated.
-[Graphics]
-iInternalResolution = 4

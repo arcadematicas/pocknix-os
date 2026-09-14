@@ -1,0 +1,29 @@
+# Maintainer: stshunz <https://github.com/stshunz>
+# WProton ARM — lanzador portable de juegos Windows (.wsquashfs) para ARM64.
+# Proyecto independiente de stshunz. Repo: https://github.com/stshunz/WProton_ARM
+pkgname=wproton-arm
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="WProton: lanzador portable de juegos Windows (.wsquashfs) con Proton/Wine en ARM64"
+arch=('aarch64')
+url="https://github.com/stshunz/WProton_ARM"
+license=('GPL3')
+depends=('bash')
+# Los runners (Proton/Wine) y el runtime (umu, steamrt sniper) los descarga el
+# propio script a runtime/ dentro de su directorio base (/opt/wproton/) en la
+# primera ejecución / desde su menú. zenity es para los menús gráficos.
+optdepends=('zenity: menús gráficos navegables con mando'
+            'squashfuse: montar juegos .wsquashfs'
+            'fuse-overlayfs: overlay para prefijos')
+# El script es un único fichero autocontenido (build.sh genera wproton.sh desde
+# wproton.base.sh + src/); aquí se vendoriza el ya generado.
+source=('wproton_arm.sh')
+sha256sums=('SKIP')
+
+package() {
+  install -Dm755 "${srcdir}/wproton_arm.sh" "${pkgdir}/opt/wproton/wproton.sh"
+  # El comando del sistema: BASE_DIR se resuelve con readlink -f, así que el
+  # symlink apunta al directorio real /opt/wproton/ y todo lo que crea el script
+  # (runtime/profiles/games/...) queda allí.
+  ln -sf /opt/wproton/wproton.sh "${pkgdir}/usr/bin/wproton"
+}
