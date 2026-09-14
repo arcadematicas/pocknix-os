@@ -97,7 +97,8 @@ EOF
     rsync -a --chown=root:root "${POCKNIX_ROOT}/overlay/" "${root}/"
     chmod +x "${root}/usr/local/bin/pocknix-diag" \
              "${root}/usr/local/bin/pocknix-expand-root" \
-             "${root}/usr/local/bin/pocknix-volumed" "${root}/usr/local/bin/pocknix-powerd" 2>/dev/null || true
+             "${root}/usr/local/bin/pocknix-volumed" "${root}/usr/local/bin/pocknix-powerd" \
+             "${root}/usr/local/bin/pocknix-oobe-marker" 2>/dev/null || true
   fi
 
   # PipeWire refuses to run as root and Proton's bwrap wants a normal user. uid 1001 stays:
@@ -196,7 +197,7 @@ EOF
   # (dev/building.md).
   chroot "${root}" systemctl enable iwd NetworkManager systemd-resolved seatd inputplumber \
         bluetooth upower udisks2 fstrim.timer \
-        pocknix-diag.timer pocknix-expand-root.service \
+        pocknix-diag.timer pocknix-expand-root.service pocknix-oobe-marker.service \
         pocknix-lavd.service pocknix-gamescope-rt.service \
         >/dev/null 2>&1 || true
   # A well-known password is baked in, so sshd ships off. ALARM enables it: disable, not skip.
