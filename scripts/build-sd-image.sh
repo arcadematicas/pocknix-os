@@ -196,7 +196,7 @@ EOF
   # (dev/building.md).
   chroot "${root}" systemctl enable iwd NetworkManager systemd-resolved seatd inputplumber \
         bluetooth upower udisks2 fstrim.timer \
-        pocknix-diag.service pocknix-expand-root.service \
+        pocknix-diag.timer pocknix-expand-root.service \
         pocknix-lavd.service pocknix-gamescope-rt.service \
         >/dev/null 2>&1 || true
   # A well-known password is baked in, so sshd ships off. ALARM enables it: disable, not skip.
