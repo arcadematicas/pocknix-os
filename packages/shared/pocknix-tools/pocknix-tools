@@ -159,6 +159,22 @@ do_status() {
   kdialog --title "$TITLE" --msgbox "<html>${status}<pre>${list}</pre></html>" || true
 }
 
+# DeckStation (stshunz's portable emulation system, ES-DE) downloads its ARM64
+# emulator AppImages on demand — never at boot, so a fresh image stays light and
+# boots fast. Runs as deck (NOT pkexec): DeckStation lives in /opt/deckstation
+# (deck-owned) and writes its saves/logs there, so root ownership would break it.
+do_deckstation() {
+  local setup="/opt/deckstation/scripts/deckstation-setup.sh"
+  if [ ! -x "${setup}" ]; then
+    gui_err "DeckStation setup not found (${setup}).\n\nIs the deckstation-arm package installed?"
+    return 0
+  fi
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Download the DeckStation emulators?\n\nDeckStation is a portable emulation system (ES-DE). This fetches the ARM64 emulator AppImages (~1 GB) into /opt/deckstation/Apps and installs the portable launchers.\n\nNeeds a network connection and can take a while. Safe to re-run: emulators already downloaded are skipped." \
+    || return 0
+  konsole -e /bin/bash -c "${setup}; echo; read -rp 'Press Enter to close... '"
+}
+
 while :; do
   mode="$(base_mode)"
   # kdialog returns the FIRST row when a tap never registered, so whatever leads this
@@ -171,6 +187,7 @@ while :; do
     rolling) items+=(mode "Return to locked mode (recommended)...") ;;
   esac
   items+=(installer "Install or remove internal Pocknix...")
+  items+=(deckstation "Download DeckStation (emulators)...")
   abl_label="$(abl_item_label "$(abl_status)")" && items+=(abl "${abl_label}")
   if [ "$(ssh_state)" = on ]; then items+=(ssh "Remote access (SSH) is ON - turn it off")
   else items+=(ssh "Remote access (SSH) is off - turn it on..."); fi
@@ -180,6 +197,7 @@ while :; do
     rollback-internal) do_rollback --internal ;;
     mode)              do_mode ;;
     installer)         /usr/bin/pocknix-installer-gui || true ;;
+    deckstation)       do_deckstation ;;
     abl)               do_abl ;;
     ssh)               do_ssh ;;
     status)            do_status ;;

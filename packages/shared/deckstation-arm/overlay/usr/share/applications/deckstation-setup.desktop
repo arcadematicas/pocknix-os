@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Configurar DeckStation
-Comment=Descargar emuladores ARM64 (opcional, requiere red)
-Exec=/opt/deckstation/scripts/deckstation-setup.sh
-Icon=system-software-install
-Categories=Settings;System;
-Terminal=true
