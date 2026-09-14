@@ -1,29 +1,21 @@
 import { ModalRoot, ToggleField } from "@decky/ui";
 import { useEffect, useState } from "react";
-import { getConfig, makoStatus, saveTweaks } from "../backend";
-import { fexSteamString, makoEnabledIn, readLaunchOptions, syncFexLaunchOption, syncMakoLaunchOption } from "../lib/launchOptions";
+import { getConfig, saveTweaks } from "../backend";
+import { fexSteamString, syncFexLaunchOption } from "../lib/launchOptions";
 import { clone } from "../lib/util";
-import type { Config, MakoStatus } from "../types";
+import type { Config } from "../types";
 import { ConfigSection } from "./ConfigSection";
 import { PerfFields, TweakFields } from "./GameFields";
+import { MakoToggle } from "./MakoToggle";
 
 /** Standalone per-game settings, opened from the library context menu. Saves on each change
  *  (no QAM debounce lifecycle here; the modal has an explicit close). */
 export function GameSettingsModal({ appid, name, closeModal }: { appid: string; name: string; closeModal?: () => void }) {
   const [config, setConfig] = useState<Config | null>(null);
-  // MAKO is not part of the tweaks blob: it lives entirely in the game's launch options,
-  // which Steam owns. Read the string back so the toggle reflects the real state rather
-  // than a shadow copy the two UIs could disagree about.
-  const [mako, setMako] = useState<MakoStatus | null>(null);
-  const [makoOn, setMakoOn] = useState(false);
   useEffect(() => {
     getConfig()
       .then(setConfig)
       .catch(() => closeModal?.());
-    makoStatus().then(setMako).catch(() => {});
-    readLaunchOptions(appid)
-      .then((options) => setMakoOn(options ? makoEnabledIn(options) : false))
-      .catch(() => {});
   }, []);
   if (!config) return <ModalRoot closeModal={closeModal}>Loading…</ModalRoot>;
 
@@ -45,17 +37,9 @@ export function GameSettingsModal({ appid, name, closeModal }: { appid: string; 
   return (
     <ModalRoot closeModal={closeModal}>
       <div style={{ fontWeight: 600, marginBottom: "8px" }}>{name || `App ${appid}`}</div>
-      {mako?.installed ? (
-        <ToggleField
-          label="MAKO (Lossless Scaling frame generation)"
-          checked={makoOn}
-          onChange={(on) => {
-            setMakoOn(on);
-            // Steam owns the string, so roll the toggle back if the write is refused.
-            syncMakoLaunchOption(appid, on).catch(() => setMakoOn(!on));
-          }}
-        />
-      ) : null}
+      {/* MAKO is a launch-option switch rather than a tweak, so it stays visible whether or
+          not the per-game profile is on. */}
+      <MakoToggle appid={appid} />
       <ToggleField
         label="Use Per-Game Settings"
         checked={enabled}

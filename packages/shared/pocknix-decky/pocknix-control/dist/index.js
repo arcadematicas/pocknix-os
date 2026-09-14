@@ -573,6 +573,45 @@ function TweakFields({ config, appid, values, patch }) {
                 } }), SP_JSX.jsx(SelectEdit, { label: "Audio Buffer", value: audioValue, options: audioLatencyOptions, onChange: (id) => patch({ audioLatency: id }) }), SP_JSX.jsx(SelectEdit, { label: "Mesa Version", value: mesaValue, options: mesaOptions, onChange: (id) => patch({ mesaVersion: id }) }), SP_JSX.jsx(EnvVarsButton, { value: String(values.envVars ?? ""), onSave: (next) => patch({ envVars: next }) })] }));
 }
 
+/** Per-game MAKO (Lossless Scaling frame generation) switch.
+ *
+ *  MAKO keeps no config blob of its own here: it activates entirely through the game's launch
+ *  options, which Steam owns. The switch therefore reads the string back instead of holding a
+ *  shadow copy the two UIs could disagree about. It stays hidden until the wrapper exists, so
+ *  it is never offered on a device where the Renderer was not installed.
+ */
+function MakoToggle({ appid }) {
+    const [installed, setInstalled] = SP_REACT.useState(false);
+    const [on, setOn] = SP_REACT.useState(false);
+    SP_REACT.useEffect(() => {
+        let cancelled = false;
+        setInstalled(false);
+        setOn(false);
+        makoStatus()
+            .then((status) => {
+            if (!cancelled)
+                setInstalled(status.installed);
+        })
+            .catch(() => { });
+        readLaunchOptions(appid)
+            .then((options) => {
+            if (!cancelled)
+                setOn(options ? makoEnabledIn(options) : false);
+        })
+            .catch(() => { });
+        return () => {
+            cancelled = true;
+        };
+    }, [appid]);
+    if (!installed)
+        return null;
+    return (SP_JSX.jsx(DFL.ToggleField, { label: "MAKO (Lossless Scaling frame gen)", checked: on, onChange: (next) => {
+            setOn(next);
+            // Steam owns the string, so roll the toggle back if the write is refused.
+            syncMakoLaunchOption(appid, next).catch(() => setOn(!next));
+        } }));
+}
+
 function clone(obj) {
     return JSON.parse(JSON.stringify(obj));
 }
@@ -649,7 +688,7 @@ function Games({ config, setConfig, reload }) {
     const storedLatency = String(values.audioLatency ?? "");
     const audioValue = audioLatencyOptions.some((option) => option.data === storedLatency) ? storedLatency : "";
     const showFields = editingDefault || perGameEnabled;
-    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "PERFORMANCE & GAME TWEAKS", children: [SP_JSX.jsx(SelectEdit, { label: "Game", value: game?.appid || "", options: editTargetOptions(config), onChange: setSelectedGame }), !editingDefault ? SP_JSX.jsx(DFL.ToggleField, { label: "Use Per-Game Settings", checked: perGameEnabled, onChange: setPerGameEnabled }) : null] }), showFields ? (SP_JSX.jsx(DFL.PanelSection, { title: "PERFORMANCE", children: editingDefault ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(SelectEdit, { label: "CPU Scheduler", value: config.lavdMode, options: lavdOptions, onChange: (mode) => applyMode(setLavdMode, mode) }), SP_JSX.jsx(SelectEdit, { label: "Fan Curve", value: config.fanMode, options: fanOptions, onChange: (mode) => applyMode(setFanMode, mode) })] })) : (SP_JSX.jsx(PerfFields, { values: values, patch: patchSettings })) })) : null, showFields ? (SP_JSX.jsxs(DFL.PanelSection, { title: "GAME TWEAKS", children: [SP_JSX.jsx("div", { className: "pocknix-note", children: "Changes apply on next game launch" }), editingDefault ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(SelectEdit, { label: "FEX Preset", value: fexValue, options: fexOptions, onChange: (id) => {
+    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "PERFORMANCE & GAME TWEAKS", children: [SP_JSX.jsx(SelectEdit, { label: "Game", value: game?.appid || "", options: editTargetOptions(config), onChange: setSelectedGame }), !editingDefault ? SP_JSX.jsx(DFL.ToggleField, { label: "Use Per-Game Settings", checked: perGameEnabled, onChange: setPerGameEnabled }) : null, !editingDefault && game?.appid ? SP_JSX.jsx(MakoToggle, { appid: game.appid }) : null] }), showFields ? (SP_JSX.jsx(DFL.PanelSection, { title: "PERFORMANCE", children: editingDefault ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(SelectEdit, { label: "CPU Scheduler", value: config.lavdMode, options: lavdOptions, onChange: (mode) => applyMode(setLavdMode, mode) }), SP_JSX.jsx(SelectEdit, { label: "Fan Curve", value: config.fanMode, options: fanOptions, onChange: (mode) => applyMode(setFanMode, mode) })] })) : (SP_JSX.jsx(PerfFields, { values: values, patch: patchSettings })) })) : null, showFields ? (SP_JSX.jsxs(DFL.PanelSection, { title: "GAME TWEAKS", children: [SP_JSX.jsx("div", { className: "pocknix-note", children: "Changes apply on next game launch" }), editingDefault ? (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(SelectEdit, { label: "FEX Preset", value: fexValue, options: fexOptions, onChange: (id) => {
                                     patchSettings({ fexProfile: id });
                                     // Enabled games without their own profile inherit this pick; resync their tokens.
                                     for (const [appid, entry] of Object.entries(tweaks.games)) {
@@ -1154,19 +1193,10 @@ function Content() {
  *  (no QAM debounce lifecycle here; the modal has an explicit close). */
 function GameSettingsModal({ appid, name, closeModal }) {
     const [config, setConfig] = SP_REACT.useState(null);
-    // MAKO is not part of the tweaks blob: it lives entirely in the game's launch options,
-    // which Steam owns. Read the string back so the toggle reflects the real state rather
-    // than a shadow copy the two UIs could disagree about.
-    const [mako, setMako] = SP_REACT.useState(null);
-    const [makoOn, setMakoOn] = SP_REACT.useState(false);
     SP_REACT.useEffect(() => {
         getConfig()
             .then(setConfig)
             .catch(() => closeModal?.());
-        makoStatus().then(setMako).catch(() => { });
-        readLaunchOptions(appid)
-            .then((options) => setMakoOn(options ? makoEnabledIn(options) : false))
-            .catch(() => { });
     }, []);
     if (!config)
         return SP_JSX.jsx(DFL.ModalRoot, { closeModal: closeModal, children: "Loading\u2026" });
@@ -1183,11 +1213,7 @@ function GameSettingsModal({ appid, name, closeModal }) {
         const existing = next.tweaks.games[appid] || {};
         next.tweaks.games[appid] = { ...existing, enabled: true, name, ...fields };
     });
-    return (SP_JSX.jsxs(DFL.ModalRoot, { closeModal: closeModal, children: [SP_JSX.jsx("div", { style: { fontWeight: 600, marginBottom: "8px" }, children: name || `App ${appid}` }), mako?.installed ? (SP_JSX.jsx(DFL.ToggleField, { label: "MAKO (Lossless Scaling frame generation)", checked: makoOn, onChange: (on) => {
-                    setMakoOn(on);
-                    // Steam owns the string, so roll the toggle back if the write is refused.
-                    syncMakoLaunchOption(appid, on).catch(() => setMakoOn(!on));
-                } })) : null, SP_JSX.jsx(DFL.ToggleField, { label: "Use Per-Game Settings", checked: enabled, onChange: (on) => {
+    return (SP_JSX.jsxs(DFL.ModalRoot, { closeModal: closeModal, children: [SP_JSX.jsx("div", { style: { fontWeight: 600, marginBottom: "8px" }, children: name || `App ${appid}` }), SP_JSX.jsx(MakoToggle, { appid: appid }), SP_JSX.jsx(DFL.ToggleField, { label: "Use Per-Game Settings", checked: enabled, onChange: (on) => {
                     update((next) => {
                         next.tweaks.games[appid] = { ...(next.tweaks.games[appid] || {}), enabled: on, name };
                     });

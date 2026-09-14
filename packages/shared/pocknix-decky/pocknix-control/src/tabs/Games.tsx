@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { setFanMode, setLavdMode } from "../backend";
 import { ConfigSection } from "../components/ConfigSection";
 import { EnvVarsButton, PerfFields, TweakFields, audioLatencyOptions, fanOptions, lavdOptions } from "../components/GameFields";
+import { MakoToggle } from "../components/MakoToggle";
 import { SelectEdit } from "../components/widgets";
 import { availableGames, editTargetOptions } from "../lib/games";
 import { fexSteamString, syncFexLaunchOption } from "../lib/launchOptions";
@@ -87,6 +88,9 @@ export function Games({ config, setConfig, reload }: {
       <PanelSection title="PERFORMANCE & GAME TWEAKS">
         <SelectEdit label="Game" value={game?.appid || ""} options={editTargetOptions(config)} onChange={setSelectedGame} />
         {!editingDefault ? <ToggleField label="Use Per-Game Settings" checked={perGameEnabled} onChange={setPerGameEnabled} /> : null}
+        {/* MAKO is a launch-option switch, not a tweak: it stays available whether or not the
+            per-game profile is on, so it sits next to the game picker. */}
+        {!editingDefault && game?.appid ? <MakoToggle appid={game.appid} /> : null}
       </PanelSection>
       {showFields ? (
         <PanelSection title="PERFORMANCE">
