@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "py_modules"))
 from pocknix_control.config import build_config
 from pocknix_control.configio import apply_config, config_dir, export_config, read_config
 from pocknix_control.led import restore_led, set_led, set_led_enabled, set_led_linked, set_led_sides
+from pocknix_control.mako import mako_status
 from pocknix_control.modes import set_fan_mode, set_lavd_mode
 from pocknix_control.oled_care import oled_care_status, run_refresher
 from pocknix_control.sdcard import detect_sdcard, format_sdcard
@@ -93,3 +94,9 @@ class Plugin:
 
     async def reboot_system(self):
         return await asyncio.to_thread(reboot_system)
+
+    # MAKO Decky activation is a launch-option edit done in the frontend; this only
+    # tells the UI whether the wrapper exists, so the toggle is hidden when the
+    # Renderer was never installed.
+    async def mako_status(self):
+        return await asyncio.to_thread(mako_status)

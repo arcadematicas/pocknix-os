@@ -45,6 +45,7 @@ const updateStatus = () => call("update_status");
 const snapshotStatus = () => call("snapshot_status");
 const startRollback = (id) => call("start_rollback", id);
 const rebootSystem = () => call("reboot_system");
+const makoStatus = () => call("mako_status");
 
 function useDebouncedSave(options) {
     const { config, field, snapshot, save, setConfig, onError, delay = 900 } = options;
@@ -332,6 +333,43 @@ async function syncFexLaunchOption(appid, steam) {
     if (steam) {
         const rest = stripped.includes("%command%") ? stripped : ["%command%", stripped].filter(Boolean).join(" ");
         next = `STEAM_COMPAT_FEX_CONFIG=${steam} ${rest}`;
+    }
+    else {
+        next = stripped === "%command%" ? "" : stripped;
+    }
+    if (next !== current.trim())
+        apps.SetAppLaunchOptions(Number(appid), next);
+}
+// MAKO Decky (Lossless Scaling frame generation) activates through a per-game launch option
+// too: its wrapper exports the Vulkan-layer environment for that game only. It rides the same
+// channel as the FEX token, so both edits rewrite the string in place and can coexist. The
+// wrapper must sit after any KEY=VALUE assignments but before %command%, or the game runs
+// unwrapped and MAKO silently does nothing.
+const MAKO_WRAPPER = "/home/deck/.local/bin/mako-run";
+const MAKO_TOKEN = /(?:\/home\/deck\/\.local\/bin\/mako-run|~\/\.local\/bin\/mako-run)\s*/g;
+const MAKO_PRESENT = /(?:\/home\/deck\/\.local\/bin\/mako-run|~\/\.local\/bin\/mako-run)/;
+/** true when the game's current launch options already run through the MAKO wrapper. */
+function makoEnabledIn(current) {
+    return MAKO_PRESENT.test(current);
+}
+/** Read a game's launch options; null when Steam will not report them (never clobber then). */
+function readLaunchOptions(appid) {
+    return getLaunchOptions(appid);
+}
+/** Add or remove the MAKO wrapper, preserving every other token in the string. */
+async function syncMakoLaunchOption(appid, enabled) {
+    const apps = window.SteamClient?.Apps;
+    if (!apps?.SetAppLaunchOptions)
+        return;
+    const current = await getLaunchOptions(appid);
+    if (current === null)
+        return;
+    const stripped = current.replace(MAKO_TOKEN, "").trim();
+    let next;
+    if (enabled) {
+        next = stripped.includes("%command%")
+            ? stripped.replace("%command%", `${MAKO_WRAPPER} %command%`)
+            : [stripped, `${MAKO_WRAPPER} %command%`].filter(Boolean).join(" ");
     }
     else {
         next = stripped === "%command%" ? "" : stripped;
@@ -1116,10 +1154,19 @@ function Content() {
  *  (no QAM debounce lifecycle here; the modal has an explicit close). */
 function GameSettingsModal({ appid, name, closeModal }) {
     const [config, setConfig] = SP_REACT.useState(null);
+    // MAKO is not part of the tweaks blob: it lives entirely in the game's launch options,
+    // which Steam owns. Read the string back so the toggle reflects the real state rather
+    // than a shadow copy the two UIs could disagree about.
+    const [mako, setMako] = SP_REACT.useState(null);
+    const [makoOn, setMakoOn] = SP_REACT.useState(false);
     SP_REACT.useEffect(() => {
         getConfig()
             .then(setConfig)
             .catch(() => closeModal?.());
+        makoStatus().then(setMako).catch(() => { });
+        readLaunchOptions(appid)
+            .then((options) => setMakoOn(options ? makoEnabledIn(options) : false))
+            .catch(() => { });
     }, []);
     if (!config)
         return SP_JSX.jsx(DFL.ModalRoot, { closeModal: closeModal, children: "Loading\u2026" });
@@ -1136,7 +1183,11 @@ function GameSettingsModal({ appid, name, closeModal }) {
         const existing = next.tweaks.games[appid] || {};
         next.tweaks.games[appid] = { ...existing, enabled: true, name, ...fields };
     });
-    return (SP_JSX.jsxs(DFL.ModalRoot, { closeModal: closeModal, children: [SP_JSX.jsx("div", { style: { fontWeight: 600, marginBottom: "8px" }, children: name || `App ${appid}` }), SP_JSX.jsx(DFL.ToggleField, { label: "Use Per-Game Settings", checked: enabled, onChange: (on) => {
+    return (SP_JSX.jsxs(DFL.ModalRoot, { closeModal: closeModal, children: [SP_JSX.jsx("div", { style: { fontWeight: 600, marginBottom: "8px" }, children: name || `App ${appid}` }), mako?.installed ? (SP_JSX.jsx(DFL.ToggleField, { label: "MAKO (Lossless Scaling frame generation)", checked: makoOn, onChange: (on) => {
+                    setMakoOn(on);
+                    // Steam owns the string, so roll the toggle back if the write is refused.
+                    syncMakoLaunchOption(appid, on).catch(() => setMakoOn(!on));
+                } })) : null, SP_JSX.jsx(DFL.ToggleField, { label: "Use Per-Game Settings", checked: enabled, onChange: (on) => {
                     update((next) => {
                         next.tweaks.games[appid] = { ...(next.tweaks.games[appid] || {}), enabled: on, name };
                     });

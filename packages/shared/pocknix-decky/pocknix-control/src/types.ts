@@ -144,3 +144,10 @@ export interface OledCareStatus {
   defaultDuration: number;
   defaultPasses: number;
 }
+
+export interface MakoStatus {
+  /** true when the MAKO per-game wrapper exists (MAKO Decky Renderer installed). */
+  installed: boolean;
+  /** Absolute path of the wrapper MAKO expects as a per-game launch option. */
+  wrapper: string;
+}
