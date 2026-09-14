@@ -43,4 +43,13 @@ package() {
   cp -a "${mako}/bin" "${dest_mako}/"
   rm -f "${dest_mako}/dist"/*.map
   find "${dest_mako}" -name __pycache__ -type d -prune -exec rm -rf {} +
+
+  # LOCAL PATCH (pocknix, TEMPORARY): MAKO ships an x86_64-only Renderer and refuses
+  # to run on native AArch64 hosts (see plugin/docs/ARMADA.md). The Odin 3 runs x86_64
+  # games through FEX, so we force-enable MAKO there until an official AArch64 Renderer
+  # ships. Two edits: declare aarch64 as a supported host (install gate) and drop the
+  # runtime `uname -m` aarch64 guard from the generated wrapper (keeping the Armada
+  # marker so existing wrappers are still recognised as current). REVERT when MAKO
+  # supports aarch64 natively (a fresh re-vendor + dropping this patch does it).
+  patch -p1 -d "${dest_mako}" < "${startdir}/mako-aarch64.patch"
 }
