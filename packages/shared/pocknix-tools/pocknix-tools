@@ -175,6 +175,31 @@ do_deckstation() {
   konsole -e /bin/bash -c "${setup}; echo; read -rp 'Press Enter to close... '"
 }
 
+# MAKO Decky (Lossless Scaling frame generation) reads Lossless.dll at runtime from a
+# *lawful, user-supplied* Lossless Scaling install. MAKO never ships the DLL and neither
+# do we: it is paid, proprietary software, so it must NOT go into a public repo. This
+# option only places the user's OWN copy where MAKO looks for it:
+#   ~/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll
+# Runs as deck (NOT pkexec): it writes into deck's Steam library.
+# NOTE: MAKO still disables Renderer installation on native AArch64 hosts (Odin 3) until
+# an AArch64 Renderer ships, so the DLL is required but not sufficient there.
+do_mako_dll() {
+  local dest_dir="${HOME}/.local/share/Steam/steamapps/common/Lossless Scaling"
+  local dest="${dest_dir}/Lossless.dll"
+  local src
+  src="$(kdialog --title "$TITLE" --getopenfilename "${HOME}/Recibidos" '*.dll')" || return 0
+  if [ -z "${src}" ] || [ ! -f "${src}" ]; then
+    gui_err "No Lossless.dll selected."
+    return 0
+  fi
+  mkdir -p "${dest_dir}" || { gui_err "Could not create:\n${dest_dir}"; return 0; }
+  if cp -f "${src}" "${dest}"; then
+    kdialog --title "$TITLE" --msgbox "Installed Lossless.dll to:\n${dest}\n\nMAKO Decky will find it here. Restart Decky/Steam if they were running."
+  else
+    gui_err "Could not copy the DLL to:\n${dest}"
+  fi
+}
+
 while :; do
   mode="$(base_mode)"
   # kdialog returns the FIRST row when a tap never registered, so whatever leads this
@@ -188,6 +213,7 @@ while :; do
   esac
   items+=(installer "Install or remove internal Pocknix...")
   items+=(deckstation "Download DeckStation (emulators)...")
+  items+=(mako-dll "Install Lossless Scaling DLL (MAKO)...")
   abl_label="$(abl_item_label "$(abl_status)")" && items+=(abl "${abl_label}")
   if [ "$(ssh_state)" = on ]; then items+=(ssh "Remote access (SSH) is ON - turn it off")
   else items+=(ssh "Remote access (SSH) is off - turn it on..."); fi
@@ -198,6 +224,7 @@ while :; do
     mode)              do_mode ;;
     installer)         /usr/bin/pocknix-installer-gui || true ;;
     deckstation)       do_deckstation ;;
+    mako-dll)          do_mako_dll ;;
     abl)               do_abl ;;
     ssh)               do_ssh ;;
     status)            do_status ;;
