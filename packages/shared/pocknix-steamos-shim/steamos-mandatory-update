@@ -1,13 +1,12 @@
 #!/bin/bash
-# pocknix steamos-mandatory-update shim — Steam's pre-OOBE "required update" gate; without it the
-# OOBE's update check fails (127) and the session requests a reboot after the language/WiFi step
-# instead of continuing. Valve's exit convention, which real OTA must keep: 0 = update available /
-# apply ok, 7 = no update.
+# pocknix steamos-mandatory-update shim — the OOBE's pre-setup "required update" gate.
+# Same contract as steamos-update: apply must report "no update" (7) or Steam marks
+# "system restart required" and reboots right after the language/WiFi step.
 set -u
 for arg in "$@"; do
   case "${arg}" in
     --supports-duplicate-detection) exit 0 ;;   # capability probe
-    check) exit 7 ;;                             # no OS update available
   esac
 done
-exit 0   # apply: nothing to do, report success
+echo "No update available" >&2
+exit 7   # check and apply: nothing to do -> no "restart required"

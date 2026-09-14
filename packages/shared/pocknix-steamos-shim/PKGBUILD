@@ -5,7 +5,7 @@
 # show the first-run OOBE (language/timezone/WiFi) instead of jumping straight to login.
 pkgname=pocknix-steamos-shim
 pkgver=0.1.0
-pkgrel=8
+pkgrel=9
 pkgdesc="SteamOS update/branch/timezone/format helper stubs + OOBE marker for the Steam Deck UI on a non-SteamOS base (until real OTA)"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
