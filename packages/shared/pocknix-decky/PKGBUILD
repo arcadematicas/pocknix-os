@@ -4,7 +4,7 @@
 # The plugin frontend (dist/index.js) is prebuilt and committed — no node at package build time.
 pkgname=pocknix-decky
 pkgver=0.1.0
-pkgrel=28
+pkgrel=29
 pkgdesc="Decky Loader (under FEX, namespaced binfmt) + Pocknix Control QAM plugin"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -28,10 +28,19 @@ package() {
   install -Dm644 "${srcdir}/pocknix-decky-loader.service" "${pkgdir}/usr/lib/systemd/system/pocknix-decky-loader.service"
   install -Dm644 "${srcdir}/PluginLoader.json"       "${pkgdir}/usr/share/fex-emu/AppConfig/PluginLoader.json"
 
+
   local plug="${startdir}/pocknix-control" dest="${pkgdir}/usr/share/decky-plugins/PocknixControl"
   install -d -m755 "${dest}"
   cp -a "${plug}/plugin.json" "${plug}/package.json" "${plug}/main.py" "${plug}/fex-profiles.json" "${dest}/"
   cp -a "${plug}/py_modules" "${plug}/dist" "${dest}/"
   rm -f "${dest}/dist"/*.map
   find "${dest}" -name __pycache__ -type d -prune -exec rm -rf {} +
+
+  local mako="${startdir}/mako" dest_mako="${pkgdir}/usr/share/decky-plugins/Mako"
+  install -d -m755 "${dest_mako}"
+  cp -a "${mako}/plugin.json" "${mako}/package.json" "${mako}/main.py" "${mako}/shared_config.py" "${dest_mako}/"
+  cp -a "${mako}/py_modules" "${mako}/dist" "${dest_mako}/"
+  cp -a "${mako}/bin" "${dest_mako}/"
+  rm -f "${dest_mako}/dist"/*.map
+  find "${dest_mako}" -name __pycache__ -type d -prune -exec rm -rf {} +
 }
