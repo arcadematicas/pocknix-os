@@ -25,5 +25,6 @@ package() {
   # El comando del sistema: BASE_DIR se resuelve con readlink -f, así que el
   # symlink apunta al directorio real /opt/wproton/ y todo lo que crea el script
   # (runtime/profiles/games/...) queda allí.
+  install -dm755 "${pkgdir}/usr/bin"
   ln -sf /opt/wproton/wproton.sh "${pkgdir}/usr/bin/wproton"
 }
