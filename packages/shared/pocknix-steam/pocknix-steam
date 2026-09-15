@@ -114,9 +114,40 @@ export QT_IM_MODULE=steam
 export GTK_IM_MODULE=Steam
 export GAMESCOPE_FALLBACK_APPID=0x41524d41
 
+# Reap our compositor and honour Steam's power requests when this session ends. Without this the
+# supervisor loop in ~/.bash_profile simply relaunches the client, which is why "Shut down" in the
+# QAM only restarted Steam (#14) and why an orphaned gamescope could hold the DRM master after a
+# crash, hot-looping on a black screen (#15).
+cleanup() {
+  local rc=$?
+  # #15: never leave a compositor (or its mangoapp child) holding /dev/dri for the next session.
+  pkill -x mangoapp 2>/dev/null || true
+  if [ -n "${GS_PID:-}" ]; then kill "${GS_PID}" 2>/dev/null || true; fi
+  # #14: Steam writes a sentinel and exits instead of calling logind itself (the paths come from
+  # STEAMOS_STEAM_*_SENTINEL above). Remove it FIRST so a failing power action cannot spin: the
+  # supervisor would otherwise relaunch Steam and Steam would request the same action again.
+  if [ -e "${SHUTDOWN_SENTINEL}" ]; then
+    rm -f "${SHUTDOWN_SENTINEL}" "${REBOOT_SENTINEL}"
+    echo "[pocknix-steam] Steam requested power off — powering off" >&2
+    systemctl poweroff || true
+    sleep 30   # hold the supervisor off until systemd takes the session down
+  elif [ -e "${REBOOT_SENTINEL}" ]; then
+    rm -f "${REBOOT_SENTINEL}"
+    echo "[pocknix-steam] Steam requested restart — rebooting" >&2
+    systemctl reboot || true
+    sleep 30
+  fi
+  exit "${rc}"
+}
+trap cleanup EXIT
+
+# Backgrounded (not exec'd) so the EXIT trap above can reap it; the comment at the top of the
+# launch explains why we must not exec gamescope.
 env -u WAYLAND_DISPLAY \
   GAMESCOPE_FAKE_OUTPUT_MM="${PANEL_MM}" \
   gamescope -W "${GS_W}" -H "${GS_H}" -r "${REFRESH}" --xwayland-count 2 --mangoapp --backend drm \
     --force-orientation "${ORIENT}" --force-composition-rotation -e -- \
     env LD_LIBRARY_PATH="${LDLP}" "${CLIENT}" -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -noshaders \
-  >"${GS_LOG}" 2>&1
+  >"${GS_LOG}" 2>&1 &
+GS_PID=$!
+wait "${GS_PID}" || true
