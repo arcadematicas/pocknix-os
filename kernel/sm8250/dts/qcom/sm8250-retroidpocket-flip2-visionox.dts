@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Retroid Pocket Flip 2 with the Visionox VTDR6130 panel; see the rp5-visionox dts. */
+
+/dts-v1/;
+
+#include "sm8250-retroidpocket-flip2.dts"
+
+/ {
+	model = "Retroid Pocket Flip2 Visionox";
+};
+
+&mdss_dsi0 {
+	panel@0 {
+		compatible = "vtdr6130,rpflip2";
+		reset-gpios = <&tlmm 75 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&i2c13 {
+	touchscreen@38 {
+		/delete-property/ touchscreen-inverted-x;
+	};
+};
+
+/* Cold-boot power-on, see the rp5-visionox dts. */
+&vdda_panel {
+	/delete-property/ regulator-boot-on;
+};

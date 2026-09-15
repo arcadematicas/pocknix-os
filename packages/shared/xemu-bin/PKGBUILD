@@ -1,0 +1,40 @@
+# xemu-bin — xemu, the original-Xbox emulator, vendored from upstream's first-party aarch64
+# Linux AppImage.
+pkgname=xemu-bin
+pkgver=0.8.136
+pkgrel=4
+pkgdesc="xemu — original Xbox emulator, official aarch64 AppImage (vendored)"
+arch=('aarch64')
+url="https://xemu.app"
+license=('GPL2')
+depends=('fuse2')
+options=('!strip')
+source=("xemu-${pkgver}.AppImage::https://github.com/xemu-project/xemu/releases/download/v${pkgver}/xemu-${pkgver}-aarch64.AppImage"
+        'pocknix-xemu.desktop')
+sha256sums=('8d2598bab0680ddd36c2d15ecccb70523e29adb852cd75e35bc5943dc0eb4816'
+            'SKIP')
+noextract=("xemu-${pkgver}.AppImage")
+
+prepare() {
+  cd "${srcdir}"
+  chmod u+x "xemu-${pkgver}.AppImage"
+  rm -rf squashfs-root AppDir
+  "./xemu-${pkgver}.AppImage" --appimage-extract ".DirIcon" >/dev/null 2>&1 || true
+  local root=squashfs-root; [ -d AppDir ] && root=AppDir
+  local tgt; tgt="$(readlink "${root}/.DirIcon" 2>/dev/null || true)"
+  while [ -n "${tgt}" ]; do
+    "./xemu-${pkgver}.AppImage" --appimage-extract "${tgt}" >/dev/null 2>&1 || true
+    local nxt; nxt="$(readlink "${root}/${tgt}" 2>/dev/null || true)"
+    [ -n "${nxt}" ] || break
+    tgt="${nxt}"
+  done
+  cp -L "${root}/${tgt:-.DirIcon}" "${srcdir}/icon.svg"
+  [ -s "${srcdir}/icon.svg" ]  # fail the build if the icon vanished upstream
+}
+
+package() {
+  install -Dm755 "${srcdir}/xemu-${pkgver}.AppImage" \
+    "${pkgdir}/opt/pocknix/emulators/xemu/xemu.AppImage"
+  install -Dm644 "${srcdir}/icon.svg" "${pkgdir}/opt/pocknix/emulators/xemu/icon.svg"
+  install -Dm644 "${srcdir}/pocknix-xemu.desktop" "${pkgdir}/usr/share/applications/pocknix-xemu.desktop"
+}

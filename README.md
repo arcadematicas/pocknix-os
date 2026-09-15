@@ -1,6 +1,6 @@
 # pocknix-os
 
-> Questions, bug reports, or just want to hang out? Join the [pocknix Discord](https://discord.gg/vcDtuNfmC)!
+> Questions, bug reports, or just want to hang out? Join the [pocknix Discord](https://discord.gg/jEpwudj4Fx)!
 
 **pocknix-os is an Arch Linux ARM (ALARM) based distro for Retroid and AYN Snapdragon handhelds.** Using the Steam ARM client, it turns these handhelds into devices that feel like a Steam Deck - power on, land in SteamOS gaming mode, pick a game, and play - but it does so on a fully mutable and performance-tuned Arch Linux base, so it's closer to something like CachyOS Handheld Edition than to real SteamOS, Bazzite, or armada.
 
@@ -34,9 +34,9 @@ As any Arch user knows, rolling updates can mean unexpected breakage, so staying
 | AYN Odin 2 | SM8550 | ✅ Supported |
 | AYN Odin 2 Portal | SM8550 | ✅ Supported |
 | AYN Odin 2 Mini | SM8550 | ✅ Supported |
-| AYN Thor | SM8550 | 📋 Planned |
-| Retroid Pocket Nova | SM8550 (QCS8550) | 📋 Planned |
-| AYN Odin 3 | SM8750 | 📋 Planned |
+| AYN Thor | SM8550 | 🧪 Beta |
+| Retroid Pocket Nova | SM8550 | 🧪 Beta |
+| AYN Odin 3 | SM8750 | 🚧 In progress |
 
 ## How to install
 
@@ -54,6 +54,8 @@ The flashed SD card carries ROCKNIX's install kit in its `rocknix_abl` folder (v
 
 > **Although installing the ROCKNIX ABL is recommended, SM8250 users can boot Pocknix without it**: flash a Pocknix SD, insert it, boot while holding **Volume −**, switch the boot mode, and boot.
 
+> **Newer Retroid Pocket 5 / Flip 2 units (2026 batches, sold as 12 GB) have a different display panel** (Visionox). Support for it is included but **untested on hardware**. Pocknix cannot tell the two panels apart before the screen driver runs, so on those units the first boot stays black (you can hear Steam start). To try it: with the SD card in a PC, create an empty file named `visionox` (or `visionox.txt`) in the top folder of the small `POCKNIX` partition, next to `KERNEL`, then boot again. If you own one, please report back on [#74](https://github.com/shuuri-labs/pocknix-os/issues/74).
+
 ## How to update
 
 Updates ship through the Pocknix pacman repo - kernel included, no reflashing. Three ways to get them:
@@ -70,6 +72,8 @@ Running from the SD card works, but the OS and your games load much faster from 
 
 - **Pocknix Tools**: switch to desktop mode, launch **Pocknix Tools**, and pick *Install or remove internal Pocknix…*.
 - **Terminal**: run `pocknix-install-internal` (do a `--dry-run` first and read the plan).
+
+Everything on the SD card's Pocknix partition (games and ROMs included) is copied and must fit in the internal space left after Android's share; the installer checks this up front and says how much to free if it does not.
 
 Installing does not change what boots. Afterwards, power off and hold **Volume −** to open the ABL menu, then set **Boot source** to **Internal** - switch it back to **SD Card** any time you want to boot the SD card again.
 
@@ -89,9 +93,11 @@ Additional options worth trying are **Proton-GE 11 (ARM64)** and **Proton-CachyO
 
 ## Emulation
 
-pocknix-os ships **ES-DE** (EmulationStation Desktop Edition) with a set of preconfigured emulators. Drop your ROMs into `~/Emulation` and they show up ready to play, no per-emulator setup needed.
+pocknix-os offers **ES-DE** (EmulationStation Desktop Edition) with a set of preconfigured emulators. As of v0.4 it is not installed out of the box: open **Pocknix Tools** in desktop mode and pick *Install the emulation layer*, and everything below is downloaded and set up. Drop your ROMs into `~/Emulation` and they show up ready to play, no per-emulator setup needed. The same entry removes it again, keeping your ROMs, saves and settings.
 
 **Star a game as a favorite in ES-DE and it appears in your Steam library**, so you can launch it straight from Big Picture / game mode alongside your Steam titles.
+
+**Copying files over the network:** turn on file sharing (Pocknix Control → Library, or Pocknix Tools) and the device appears in Finder / Explorer / your Linux file manager, so you can drag ROMs, BIOS files and emulator firmware straight onto it. See [copying files over the network](docs/emulation-setup.md#copying-files-over-the-network).
 
 See the [emulation docs](docs/emulation-setup.md) for where ROMs and BIOS files go, and how to tweak per-emulator settings.
 
@@ -107,7 +113,7 @@ Supported systems:
 | Nintendo DS | RetroArch (melonDS) |
 | Nintendo 3DS | Azahar |
 | GameCube / Wii | Dolphin |
-| Nintendo Switch | Eden |
+| Nintendo Switch | Eden or Ryujinx (bring your own build, see below) |
 | Sega Master System / Genesis / Game Gear / Sega CD | RetroArch (Genesis Plus GX) |
 | Sega Saturn | RetroArch (YabaSanshiro) |
 | Sega Dreamcast | RetroArch (Flycast) |
@@ -115,6 +121,14 @@ Supported systems:
 | PlayStation 2 | ARMSX2 |
 | PlayStation Portable | PPSSPP |
 | Arcade / Neo Geo | RetroArch (FBNeo) |
+
+**Bring your own emulator build.** Every standalone emulator has a folder under
+`~/Emulation/emulators/` (`eden`, `ryujinx`, `armsx2`, `rpcs3`, `vita3k`, `xemu`, `dolphin`,
+`cemu`, `azahar`, `ppsspp`). Put one file in it, an AppImage or a binary, and Pocknix launches
+that instead of its own build, from ES-DE and from Steam alike, with the same pre-made
+settings. Remove the file to go back. Pocknix ships no Switch emulator: drop an Eden or
+Ryujinx build into its folder and it comes pre-configured; with both present, pick one in ES-DE
+under Other Settings, Alternative Emulators.
 
 ## Pocknix Control
 
@@ -124,7 +138,8 @@ Supported systems:
 - **Add Non-Steam Game**: Steam's own "Add a Non-Steam Game" dialog does not work on pocknix-os (Steam is an X11 app and Plasma Mobile cannot summon new windows for it), so Pocknix Control provides the feature natively in game mode instead.
 - **Power**: fan curve (Quiet / Moderate / Performance) and CPU scheduler mode, applied live.
 - **LED Control**: adjust the stick RGB LED colours and brightness.
-- **Storage**: format a microSD card for Steam, Deck-compatible, straight from game mode.
+- **File Sharing** (same tab as Add Non-Steam Game): toggle network file sharing so you can drag files onto the device from another computer.
+- **SD Card** (same tab): format a microSD card for Steam, Deck-compatible, straight from game mode.
 - **Updater**: check for and install system updates from the Quick Access Menu.
 
 See the [Pocknix Control docs](docs/pocknix-control.md) for the full tour.

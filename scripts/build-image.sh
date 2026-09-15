@@ -17,6 +17,10 @@ for t in curl tar rsync sed; do need_tool "$t"; done
 LOCAL_REPO_DIR="${LOCALREPO_DIR}"                 # per-SoC: build/localrepo/${SOC} (set in lib.sh)
 LOCAL_REPO_SHARED_DIR="${LOCALREPO_SHARED_DIR}"   # SoC-neutral: build/localrepo/shared
 
+# ES-DE + the emulators are an opt-in layer Pocknix Tools installs, so the image leaves them
+# out; =1 bakes them in (and their ALARM deps then need no base-extras.list entry).
+POCKNIX_EMULATION="${POCKNIX_EMULATION:-0}"
+
 render_pacman_conf() {
   local out="$1"
   log "rendering pacman.conf (base: ${POCKNIX_BASE_SNAPSHOT:-live ALARM})"
@@ -72,17 +76,14 @@ install_local_packages() {
   # copy would never be upgraded by a meta install — so force ours here, loudly.
   chroot "${root}" pacman -S --noconfirm --needed \
     pocknix/mesa pocknix/vulkan-freedreno pocknix/gamescope pocknix/mangohud
-  # The layer metas: pocknix-core (mandatory) + all three optional layers (the
-  # image ships the full experience; #48 makes emulation optional behind a
-  # flag). Their unqualified depends resolve by repo order — [pocknix] and
-  # [pocknix-shared] sit ABOVE the base repos (append_local_repo), so pocknix
-  # names always resolve to our builds, ALARM names to ALARM/base.
-  chroot "${root}" pacman -S --noconfirm --needed \
-    pocknix-shared/pocknix-core \
-    pocknix-shared/pocknix-steam-full \
-    pocknix-shared/pocknix-desktop-full \
-    pocknix-shared/deckstation-arm \
-    pocknix-shared/wproton-arm
+  # The layer metas (POCKNIX_EMULATION=1 adds the upstream emulation layer; deckstation-arm and
+  # wproton-arm are OUR emulation layer and always ship). Their unqualified depends resolve by repo
+  # order: [pocknix] + [pocknix-shared] sit ABOVE the base repos (append_local_repo), so pocknix
+  # names resolve to our builds, ALARM names to base.
+  local metas=(pocknix-core pocknix-steam-full pocknix-desktop-full deckstation-arm wproton-arm)
+  if [ "${POCKNIX_EMULATION}" = 1 ]; then metas+=(pocknix-emulation-full)
+  else log "emulation layer left out (POCKNIX_EMULATION=1 bakes it in)"; fi
+  chroot "${root}" pacman -S --noconfirm --needed "${metas[@]/#/pocknix-shared/}"
   # GUARD: these local builds MUST come from [pocknix], not silently fall back / go missing. gamescope
   # especially: ALARM's vanilla lacks --use-rotation-shader and black-screens on the RP6 (bitten 3x).
   local mesa_ver; mesa_ver="$(chroot "${root}" pacman -Q mesa 2>/dev/null | awk '{print $2}')"
@@ -105,10 +106,21 @@ install_local_packages() {
   chroot "${root}" pacman -Q pocknix-desktop >/dev/null 2>&1 || {
     die "pocknix-desktop not installed — its local build wasn't in [pocknix]. Build it: 'make packages PKG=pocknix-desktop', confirm build/localrepo/pocknix-desktop-*.pkg.tar.* exists, then re-run."
   }
-  # Emulation is NOT bundled anymore: DeckStation (deckstation-arm, stshunz's
-  # standalone project) is the emulation layer and downloads its own emulators on
-  # demand via `deckstation-setup` (opt-in, never at boot). Same for WProton
-  # (wproton-arm) for Windows games.
+  # DeckStation (deckstation-arm, stshunz's standalone project) is OUR emulation layer and always
+  # ships: it downloads its own emulators on demand via `deckstation-setup` (opt-in, never at
+  # boot). Same for WProton (wproton-arm) for Windows games. The block below is the separate,
+  # flag-gated upstream layer.
+  # Source-built emulators are optdepends of pocknix-emulation-full, installed
+  # OPTIONAL-warn here (first-ever aarch64 builds = likeliest to fail; a missing
+  # one just leaves that system out of ES-DE, which degrades gracefully) — don't
+  # fail the whole image over 3DS/GameCube/WiiU.
+  local oe
+  if [ "${POCKNIX_EMULATION}" = 1 ]; then
+    for oe in dolphin-emu azahar cemu; do
+      chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
+        || warn "optional emulator ${oe} not in [pocknix-shared] (build failed/skipped?) — image ships WITHOUT it"
+    done
+  fi
   # Kernel: swap ALARM's generic linux-aarch64 for our SoC kernel package (Image + modules,
   # built by `make kernel` -> staged into the package). Its own step (not bundled above) so a
   # missing kernel build errors clearly, and the replace is deterministic. `provides=linux`.
@@ -174,14 +186,6 @@ install_local_packages() {
       log "repo key trusted: ${fpr}"
     fi
   fi
-}
-
-read_pkglist() {
-  # One package per line, optional inline "# comment". Strip the comment and take the first
-  # token: `sed 's/#.*//'` alone LEAVES the whitespace before the # (e.g. "vulkan-tools     "),
-  # which pacman then can't match -> "target not found". awk $1 drops surrounding whitespace and
-  # blank/comment-only lines cleanly.
-  awk '{ sub(/#.*/, ""); if ($1 != "") print $1 }' "$1"
 }
 
 configure_keyring() {

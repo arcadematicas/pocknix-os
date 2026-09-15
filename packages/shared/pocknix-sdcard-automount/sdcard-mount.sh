@@ -1,9 +1,8 @@
 #!/bin/bash
-# sdcard-mount.sh — udev-driven SD automount for the Steam session. Beyond mounting it must tell
-# the RUNNING client over steam://addlibraryfolder, or a live-inserted card never appears in the
-# Storage UI. Mounted with an ext4 idmap swapping SteamOS's deck uid 1000 for our 1001 so a card
-# roams between pocknix and real SteamOS devices; a chown here would stamp 1001 on disk instead.
-# Derived from Valve jupiter-hw-support's /usr/lib/hwsupport/sdcard-mount.sh.
+# sdcard-mount.sh - udev-driven SD automount. It must also tell the RUNNING client over
+# steam://addlibraryfolder or a live-inserted card never appears in the Storage UI. ext4 is
+# mounted through an idmap (1000 <-> 1001) so cards roam to real SteamOS devices; a chown
+# would stamp 1001 on disk instead.
 
 usage()
 {
@@ -19,7 +18,7 @@ ACTION=$1
 DEVBASE=$2
 DEVICE="/dev/${DEVBASE}"
 
-# deck is 1001 on pocknix (uid 1000 is alarm); every SteamOS device numbers deck 1000.
+# deck is 1001 on pocknix (1000 was ALARM's default login); every SteamOS device numbers deck 1000.
 STEAM_UID=1001
 STEAMOS_UID=1000
 STEAM_HOME=/home/deck
@@ -76,8 +75,7 @@ do_mount()
 
     /bin/mkdir -p -- "${MOUNT_POINT}"
 
-    # Identity map except the two singletons that trade 1000 and 1001, so every other owner
-    # (root-owned lost+found, etc.) passes through unchanged instead of becoming `nobody`.
+    # identity except the 1000/1001 swap, or every other owner (lost+found) becomes nobody
     TAIL_START=$((STEAM_UID + 1))
     TAIL_COUNT=$((4294967295 - TAIL_START))
     IDMAP="u:0:0:${STEAMOS_UID} u:${STEAMOS_UID}:${STEAM_UID}:1 u:${STEAM_UID}:${STEAMOS_UID}:1 u:${TAIL_START}:${TAIL_START}:${TAIL_COUNT}"

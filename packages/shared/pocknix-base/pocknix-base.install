@@ -7,10 +7,9 @@ _prune_superseded() {
         /var/lib/pocknix/extra-packages.snapshot
 }
 
-# Retrofits the [pocknix-shared] stanza onto devices that predate it. The URL is
-# DERIVED from the installed [pocknix] one because LAN-test devices point at their own
-# host. pacman reads its config at transaction start, so the repo goes live on the next
-# transaction; the systemd guard keeps image builds out (build-image.sh writes both).
+# Retrofits the [pocknix-shared] stanza. The URL derives from the installed [pocknix] one
+# (LAN-test devices point at their own host); pacman reads its config at transaction start,
+# so it goes live next transaction. The systemd guard keeps image chroots out.
 _add_shared_repo() {
   [ -d /run/systemd/system ] || return 0
   local conf=/etc/pacman.conf
@@ -35,12 +34,27 @@ _add_shared_repo() {
   echo "pocknix: added the [pocknix-shared] repo (${server}); active from the next update."
 }
 
+# ALARM's default login (password `alarm`, wheel) is a known root credential once SSH is on.
+# The home stays: a single login seeds it, so its contents cannot prove nobody moved in.
+_drop_alarm_user() {
+  [ -d /run/systemd/system ] || return 0
+  id alarm >/dev/null 2>&1 || return 0
+  if pgrep -u alarm >/dev/null 2>&1; then
+    echo "pocknix: 'alarm' has running processes; it is removed on the next update instead."
+    return 0
+  fi
+  userdel alarm >/dev/null 2>&1 \
+    && echo "pocknix: removed ALARM's default 'alarm' login (its files stay in /home/alarm)."
+}
+
 post_install() {
   _prune_superseded
   _add_shared_repo
+  _drop_alarm_user
 }
 
 post_upgrade() {
   _prune_superseded
   _add_shared_repo
+  _drop_alarm_user
 }

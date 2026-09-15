@@ -1,7 +1,7 @@
 #!/bin/bash
-# pocknix-tools — kdialog front-end for the maintenance CLIs. Every privileged
-# step goes through pkexec; the polkit rules ship with the package that owns
-# each binary (pocknix-snapshots, pocknix-base, pocknix-bsp-common).
+# pocknix-tools - kdialog front-end for the maintenance CLIs. Every privileged step is a
+# pkexec of a program whose own package ships its polkit rule; never pkexec anything else
+# (the session has no polkit agent, see dev/desktop.md).
 set -euo pipefail
 
 TITLE="Pocknix Tools"
@@ -90,8 +90,7 @@ do_rollback() {
     gui_err "Rollback failed — nothing was changed:\n\n$(printf '%s' "${out}" | tail -4)"
     return 0
   fi
-  # set -euo pipefail: "Later" and a dismissed msgbox are answers, not failures —
-  # unguarded they would take the whole app down on a successful rollback.
+  # under set -e, "Later" and a dismissed msgbox would take the app down after a good rollback
   if [ -n "${flag}" ]; then
     kdialog --title "$TITLE" --msgbox "Internal install rolled back to snapshot ${id}.\nIt boots into that state next time you start from internal storage." || true
   elif kdialog --title "$TITLE" --yes-label "Reboot now" --no-label "Later" \
@@ -124,6 +123,75 @@ do_ssh() {
   kdialog --title "$TITLE" --msgbox "Remote access is on.\n\nLog in as $(id -un)${addrs:+ at ${addrs% }}.\nIt stays on until you turn it off here." || true
 }
 
+share_state()     { pocknix-share status 2>/dev/null | sed -n 's/^state=//p'; }
+share_installed() { [ "$(pocknix-share status 2>/dev/null | sed -n 's/^installed=//p')" = yes ]; }
+
+do_share() {
+  local out rc=0 addrs
+  if [ "$(share_state)" = on ]; then
+    out="$(pkexec /usr/bin/pocknix-share off 2>&1)" || rc=$?
+    [ "${rc}" -eq 0 ] || { gui_err "Could not turn file sharing off:\n\n$(printf '%s' "${out}" | tail -3)"; return 0; }
+    kdialog --title "$TITLE" --msgbox "File sharing is off. The device no longer shares any folder." || true
+    return 0
+  fi
+  # download before the warning, or the user agrees to the trade and hits a dead end
+  if ! share_installed; then
+    kdialog --title "$TITLE" --warningcontinuecancel \
+      "File sharing needs Samba, which is not installed (7.4 MB download).\n\nInstall it now?" \
+      || return 0
+    konsole_run "/usr/bin/pocknix-share install"
+    share_installed || { gui_err "Samba is still not installed. File sharing cannot start."; return 0; }
+  fi
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Share this device's home folder over the network?\n\nAnyone on the same network can then read and write every file in it - your games, saves and emulator settings, but also your Steam login and SSH keys. There is no password.\n\nOnly turn this on at home. It stays on, across reboots, until you turn it off here." \
+    || return 0
+  out="$(pkexec /usr/bin/pocknix-share on 2>&1)" || rc=$?
+  if [ "${rc}" -ne 0 ]; then
+    gui_err "Could not turn file sharing on:\n\n$(printf '%s' "${out}" | tail -3)"
+    return 0
+  fi
+  addrs="$(ssh_addrs)"
+  kdialog --title "$TITLE" --msgbox "File sharing is on.\n\nOn another computer, open:\n  smb://pocknix.local${addrs:+  (or smb://${addrs%% *})}\n\nConnect as Guest - there is no password.\nIt stays on until you turn it off here." || true
+}
+
+layer_installed() { [ "$(pocknix-layer status 2>/dev/null | sed -n 's/^installed=//p')" = yes ]; }
+
+do_layer() {
+  if layer_installed; then
+    kdialog --title "$TITLE" --warningcontinuecancel \
+      "Remove the emulation layer?\n\nES-DE, RetroArch and the standalone emulators are uninstalled. Your ROMs, BIOS files, saves and emulator settings are kept, so installing the layer again brings everything back as it was.\n\nClose ES-DE and any emulator first. The ES-DE and favourite tiles in Steam disappear the next time Steam starts." \
+      || return 0
+    konsole_run "/usr/bin/pocknix-layer remove"
+    layer_installed && { gui_err "The emulation layer is still installed. The terminal output says what went wrong."; return 0; }
+    kdialog --title "$TITLE" --msgbox "The emulation layer is removed. Your ROMs and settings are still in place." || true
+    return 0
+  fi
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Install the emulation layer (ES-DE + emulators)?\n\nThis is a large download and runs a full system update first. Everything is ready to use afterwards; no restart needed." \
+    || return 0
+  konsole_run "/usr/bin/pocknix-layer install"
+  layer_installed || { gui_err "The emulation layer is still not installed. The terminal output says what went wrong."; return 0; }
+  kdialog --title "$TITLE" --msgbox "The emulation layer is installed.\n\nES-DE is in the app menu now, and in Steam the next time it starts." || true
+}
+
+emulators_present() { pocknix-roms-init --list 2>/dev/null || true; }
+
+do_defaults() {
+  local rows args=() name label choice out rc=0
+  rows="$(emulators_present)"
+  [ -n "${rows}" ] || { gui_err "No emulators are installed."; return 0; }
+  while IFS=$'\t' read -r name label; do args+=("${name}" "${label}"); done <<< "${rows}"
+  args+=(all "Everything above")
+  choice="$(kdialog --title "$TITLE" --menu "Restore the Pocknix default settings for:" "${args[@]}")" || return 0
+  [ -n "${choice}" ] || return 0
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Restore the default settings for ${choice}?\n\nThe current settings file is kept next to the new one as a .bak-<date> copy. Games, saves and controller profiles are not touched." \
+    || return 0
+  out="$(pocknix-roms-init --reset "${choice}" 2>&1)" || rc=$?
+  [ "${rc}" -eq 0 ] || { gui_err "Restoring defaults failed:\n\n$(printf '%s' "${out}" | tail -3)"; return 0; }
+  kdialog --title "$TITLE" --msgbox "Default settings restored for ${choice}." || true
+}
+
 # terminal on purpose: pocknix-base demands a typed ROLL and streams the pacman run
 konsole_run() { konsole -e /bin/bash -c "pkexec $1; echo; read -rp 'Press Enter to close... '"; }
 
@@ -143,14 +211,12 @@ do_mode() {
   esac
 }
 
-# kdialog rich text mangles <table>, desyncs on tags inside a <pre> and glues inline text
-# preceding one, so the CLI's printf columns inside a single plain <pre> are the table.
+# kdialog rich text mangles <table> and tags inside <pre>: the CLI's printf columns are the table
 do_status() {
   local list
   list="$(pkexec /usr/bin/pocknix-rollback --list 2>/dev/null)" || list=""
   list="$(printf 'Snapshots (newest first)\n\n'; printf '%s\n' "${list}" | head -1; printf '%s\n' "${list}" | tail -n +2 | sort -r)"
-  # Rich text eats newlines and a wide pre defeats word-wrap, hence explicit <br>s and
-  # pre-folding; escape first, since the converge-blocked hint contains a literal <name>.
+  # rich text eats newlines and a wide <pre> defeats wrapping; escape first (a hint holds <name>)
   local status
   status="$(pocknix-base status 2>&1 \
     | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' \
@@ -202,8 +268,7 @@ do_mako_dll() {
 
 while :; do
   mode="$(base_mode)"
-  # kdialog returns the FIRST row when a tap never registered, so whatever leads this
-  # list is what a missed tap runs: keep the read-only one there.
+  # a missed tap returns the FIRST row: keep the read-only item there
   items=(status "Show system status")
   items+=(rollback "Roll back the last update...")
   internal_candidate && items+=(rollback-internal "Roll back the INTERNAL install...")
@@ -217,6 +282,11 @@ while :; do
   abl_label="$(abl_item_label "$(abl_status)")" && items+=(abl "${abl_label}")
   if [ "$(ssh_state)" = on ]; then items+=(ssh "Remote access (SSH) is ON - turn it off")
   else items+=(ssh "Remote access (SSH) is off - turn it on..."); fi
+  if [ "$(share_state)" = on ]; then items+=(share "File sharing (SMB) is ON - turn it off")
+  else items+=(share "File sharing (SMB) is off - turn it on..."); fi
+  if layer_installed; then items+=(emulation "Emulation layer is installed - remove it...")
+  else items+=(emulation "Install the emulation layer (ES-DE + emulators)..."); fi
+  [ -n "$(emulators_present)" ] && items+=(defaults "Restore emulator default settings...")
   choice="$(kdialog --title "$TITLE" --menu "Pocknix maintenance tools\nMode: ${mode^^}" "${items[@]}")" || exit 0
   case "${choice}" in
     rollback)          do_rollback "" ;;
@@ -227,6 +297,9 @@ while :; do
     mako-dll)          do_mako_dll ;;
     abl)               do_abl ;;
     ssh)               do_ssh ;;
+    share)             do_share ;;
+    emulation)         do_layer ;;
+    defaults)          do_defaults ;;
     status)            do_status ;;
     *) exit 0 ;;
   esac

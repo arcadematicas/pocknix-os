@@ -18,7 +18,7 @@ Current families:
 
 * **sm8550** (qcom-abl): Retroid Pocket 6 (+TOP-DPAD), AYN Odin 2 / Mini / Portal —
   one RSInput controller config for all boards.
-* **sm8250** (arm-efi): Retroid Pocket 5, Retroid Pocket Flip 2 (Flip 2 hardware-unverified).
+* **sm8250** (arm-efi): Retroid Pocket 5, Retroid Pocket Flip 2 (Flip 2 hardware-unverified); each also as a Visionox-panel revision (separate `-visionox` dtb + board conf, picked by the grub `visionox` marker file).
 
 Adding a **board to an existing family**: a `boards/<board>.conf` + a dispatcher case
 arm + (if its controller differs) an inputplumber yaml/map with the board's dt-model
@@ -88,11 +88,27 @@ Sourced by shared session scripts (`pocknix-steam`, `pocknix-desktop-rotate`,
 | `POCKNIX_PANEL_W/H/REFRESH` | pocknix-steam | gamescope -W/-H/-r |
 | `POCKNIX_PANEL_ORIENT` | pocknix-steam | gamescope --force-orientation |
 | `POCKNIX_PANEL_MM` | pocknix-steam | GAMESCOPE_FAKE_OUTPUT_MM (gamepadui DPI; deliberately faked on small panels) |
-| `POCKNIX_DESKTOP_ROTATE/_SCALE` | pocknix-desktop-rotate | kscreen-doctor rotation/scale |
+| `POCKNIX_DESKTOP_ROTATE/_SCALE` | pocknix-desktop-rotate | kscreen-doctor rotation/scale (seeded once per user; env re-forces) |
+| `POCKNIX_BOARD_UNKNOWN` | pocknix-desktop-rotate | set by the device.conf fallback branch: board not in the list, do not force guessed values |
+| `POCKNIX_PANEL_OUTPUT` | pocknix-steam, pocknix-desktop-rotate | DRM connector of the main panel (`DSI-2`); gamescope `--prefer-output`, the desktop seed's output. Absent = single panel, first DSI |
+| `POCKNIX_PANEL2_OUTPUT`, `POCKNIX_PANEL2_W/H`, `POCKNIX_DESKTOP2_SCALE` | pocknix-desktop-rotate | second panel (dual-screen boards): enabled, rotated like the main one, scaled, placed below it |
+| `POCKNIX_TOUCH_NAME` / `POCKNIX_TOUCH2_NAME` | pocknix-desktop, pocknix-second-screen | evdev names of the main/second touchscreen: kwin maps each to its output (kcminputrc); the second is libinput-ignored outside the desktop session (udev rule in the board BSP + pocknix-second-screen) |
 | `POCKNIX_BIG_CORES` | pocknix-play | taskset big-core mask for emulator pinning |
 | `POCKNIX_BOOT_STYLE` | pocknix-install/uninstall-internal | qcom-abl (default) or arm-efi: selects the internal-install boot-file handling (arm-efi pins grub.cfg + fstab to internal PARTUUIDs) |
 | `POCKNIX_INTERNAL_DISK` | pocknix-install/uninstall-internal, installer-gui | internal disk (default /dev/sda) |
 | `POCKNIX_BOOT_GPT_NAME/_FAT_LABEL`, `POCKNIX_ROOT_LABEL` | pocknix-install/uninstall-internal | internal-install boot contract |
+
+Picking the display values for a new board:
+
+* `POCKNIX_PANEL_W/H` are the panel's NATIVE frame. `POCKNIX_PANEL_ORIENT` is `left`/`right`
+  for a portrait panel mounted landscape (the consumers transpose) and `normal` for a
+  landscape-native panel (no DT `rotation`): W/H pass through untransposed and
+  `POCKNIX_DESKTOP_ROTATE=none`.
+* `POCKNIX_PANEL_MM` stays `177x100` unless a tester says otherwise. It is a fake that sets
+  gamepadui's dpi (`W * 25.4 / 177`), field-validated on 1920- and 1280-wide panels; deviate
+  only if the UI crops (dpi too high for the width) or reads tiny.
+* `POCKNIX_DESKTOP_SCALE` = the largest 0.25 step that keeps the logical short side >= 480
+  (the Plasma Mobile shell needs the height): 1080-line panels -> 2.5, 960-line -> 2.0.
 
 Every consumer falls back to the RP6 values when a key (or the whole file) is absent, so
 a missing/partial device.conf degrades to known-good behavior instead of breaking.
@@ -104,11 +120,14 @@ on an arm-efi board's internal storage.)
 1. Confirm the board's dtb is in `kernel/<soc>/dts` (re-`make sync` if ROCKNIX added it)
    and note the DTS `model =` string — it keys everything at runtime.
 2. `boards/<board>.conf` in the family BSP (panel geometry/orientation from the DTS,
-   `POCKNIX_BIG_CORES` from the SoC topology) + a dispatcher case arm.
+   `POCKNIX_BIG_CORES` from the SoC topology); display values per the rule above + a dispatcher case arm.
 3. InputPlumber: extend the family yaml's `matches:` if the board shares the family
    controller, or add a new model-gated yaml + capability map if it differs.
 4. UCM if the sound card name differs; udev quirks as needed. arm-efi: add the board's
    grub.cfg menuentry.
+   Dual-screen board: the `POCKNIX_PANEL2_*`/`POCKNIX_TOUCH*` keys plus a udev rule
+   ignoring the second touchscreen unless `/run/pocknix/second-screen` exists (see
+   the sm8550 BSP's Thor rule); gamescope blanks the second panel by itself.
 5. Bump pkgrels; `make build DEVICE=<soc>` — no shared file should need editing; if one
    does, the boundary has a hole: fix the boundary, not the device.
 6. On-device checklist: pocknix-notes dev/device-smoke-checklist.md.

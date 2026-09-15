@@ -5,7 +5,7 @@ hardware, so the most valuable thing a PR can bring is **evidence it works on a 
 and **instructions that let me reproduce that on mine**.
 
 Questions, ideas, or "is this worth doing?" chats: the
-[pocknix Discord](https://discord.gg/vcDtuNfmC) or a GitHub issue. For anything large
+[pocknix Discord](https://discord.gg/mSSNKQg9m) or a GitHub issue. For anything large
 (a new device family, a new session, a kernel bump, a new packaging approach), open an issue
 first so we can agree the shape before you spend the time.
 
@@ -68,6 +68,11 @@ Three rules that catch most first-time contributors:
   package with a bumped `pkgrel`. If it genuinely cannot, say so in the PR.
 - **Runtime state that a session or service can clobber must be re-asserted** where it will
   stick (a systemd unit, the session launch path), not set once at install time.
+- **A new Arch Linux ARM package is not installable on existing devices until it is hosted
+  in the frozen base.** Installs are locked to `[pocknix-base]`, so `pacman -S <name>` fails
+  until I add it. List the name in `config/packages/base-extras.list`, say so in the PR, and
+  I host it with `make extend-base` (its dependencies must already be in the base) or at the
+  next base cut.
 
 ## Building
 
@@ -240,6 +245,12 @@ check it, which is the single biggest reason a PR stalls.
   listed in `PATCHES.md` (gamescope, mesa, mangohud, FEX, the kernels, GRUB), update its row.
 - **New dependencies** should come from the Arch Linux ARM repos or `[pocknix]`. Flag anything
   large - image size matters on a handheld.
+- **A new package name needs a `depends=` edge** from the layer metapackage that owns it
+  (`pocknix-core`, `pocknix-{steam,desktop,emulation}-full`) or from `pocknix-device-<soc>`,
+  in the same PR. `pacman -Syu` never installs a name nothing depends on, so without the edge
+  only fresh images get it. Renaming a package needs `replaces=` + `conflicts=` for the old
+  name. The maintainer's publish gate (`scripts/stage-check.sh`) rejects both omissions, so
+  fixing them up front saves a round trip.
 - **Do not touch `vendor/`.** `make sync` regenerates it.
 
 ## Commits and PR hygiene

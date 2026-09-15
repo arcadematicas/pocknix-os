@@ -1,0 +1,43 @@
+# vita3k-bin — Vita3K, the PS Vita emulator, vendored from the native aarch64 AppImage on
+# upstream's rolling 'continuous' tag. That tag is force-updated, so pkgver carries the date we
+# vendored on; taking a newer build means bumping the date AND clearing the srccache copy.
+pkgname=vita3k-bin
+pkgver=0.2026.08.10
+pkgrel=2
+pkgdesc="Vita3K — PS Vita emulator, native aarch64 AppImage (vendored, rolling upstream)"
+arch=('aarch64')
+url="https://vita3k.org"
+license=('GPL2')
+depends=('fuse2')
+options=('!strip')
+source=("Vita3K-${pkgver}.AppImage::https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
+        'pocknix-vita3k.desktop')
+# The sha is what makes a moved 'continuous' tag fail loudly instead of shipping different
+# bytes under the same pkgver.
+sha256sums=('48a33c33086fcd00a037b58e0a98e1129b8322b007361c9b2ece9d039e32e195'
+            'SKIP')
+noextract=("Vita3K-${pkgver}.AppImage")
+
+prepare() {
+  cd "${srcdir}"
+  chmod u+x "Vita3K-${pkgver}.AppImage"
+  rm -rf squashfs-root AppDir
+  "./Vita3K-${pkgver}.AppImage" --appimage-extract ".DirIcon" >/dev/null 2>&1 || true
+  local root=squashfs-root; [ -d AppDir ] && root=AppDir
+  local tgt; tgt="$(readlink "${root}/.DirIcon" 2>/dev/null || true)"
+  while [ -n "${tgt}" ]; do
+    "./Vita3K-${pkgver}.AppImage" --appimage-extract "${tgt}" >/dev/null 2>&1 || true
+    local nxt; nxt="$(readlink "${root}/${tgt}" 2>/dev/null || true)"
+    [ -n "${nxt}" ] || break
+    tgt="${nxt}"
+  done
+  cp -L "${root}/${tgt:-.DirIcon}" "${srcdir}/icon.png"
+  [ -s "${srcdir}/icon.png" ]  # fail the build if the icon vanished upstream
+}
+
+package() {
+  install -Dm755 "${srcdir}/Vita3K-${pkgver}.AppImage" \
+    "${pkgdir}/opt/pocknix/emulators/vita3k/Vita3K.AppImage"
+  install -Dm644 "${srcdir}/icon.png" "${pkgdir}/opt/pocknix/emulators/vita3k/icon.png"
+  install -Dm644 "${srcdir}/pocknix-vita3k.desktop" "${pkgdir}/usr/share/applications/pocknix-vita3k.desktop"
+}

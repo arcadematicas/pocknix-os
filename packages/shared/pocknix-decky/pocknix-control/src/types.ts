@@ -151,3 +151,9 @@ export interface MakoStatus {
   /** Absolute path of the wrapper MAKO expects as a per-game launch option. */
   wrapper: string;
 }
+
+export type ShareStatus = {
+  installed: boolean;
+  on: boolean;
+  active: boolean;
+};

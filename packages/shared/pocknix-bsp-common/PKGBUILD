@@ -3,8 +3,8 @@
 # live in devices/<name>/packages/pocknix-bsp-<name>, which depends on this package.
 pkgname=pocknix-bsp-common
 pkgver=0.1.0
-pkgrel=14
-pkgdesc="pocknix shared board support: sleep.d dispatcher, suspend hooks, power-key policy, session udev rules, wheel sudo, fan/scheduler daemons, ABL updater"
+pkgrel=17
+pkgdesc="pocknix shared board support: sleep.d dispatcher, suspend hooks, power-key policy, session udev rules, wheel sudo, fan/scheduler daemons, ABL updater, second-screen touch policy, suspend display hook"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
 license=('GPL2')
@@ -15,6 +15,7 @@ optdepends=('inputplumber: the 001-inputplumber suspend hooks manage its USB/IP 
             'scx-scheds: scx_lavd for pocknix-lavd.service (unit self-skips without it)')
 install=pocknix-bsp-common.install
 source=('pocknix-sleep' 'sdam-debug-pre' 'sdam-debug-post'
+        'drain-log-pre' 'drain-log-post'
         'inputplumber-sleep-pre' 'inputplumber-sleep-post'
         'usb-role-sleep-pre' 'usb-role-sleep-post' 'display-sleep-post'
         '20-pocknix-powerkey.conf'
@@ -25,10 +26,11 @@ source=('pocknix-sleep' 'sdam-debug-pre' 'sdam-debug-post'
         'pocknix-update-abl' '52-pocknix-abl.rules' 'pocknix-gpt-abl'
         'pocknix-refresh-abl-kit'
         'pocknix-gamepad-target' 'pocknix-gamepad-target.service'
+        'pocknix-second-screen' 'pocknix-second-screen.service'
         'iwd-wait-wlan0.conf')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
             'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-sleep" \
@@ -47,9 +49,14 @@ package() {
     "${pkgdir}/usr/lib/pocknix/sleep.d/pre/003-sdam-debug"
   install -Dm755 "${srcdir}/sdam-debug-post" \
     "${pkgdir}/usr/lib/pocknix/sleep.d/post/003-sdam-debug"
-  # Runs last: the display comes back after InputPlumber has re-attached its virtual pad.
+  install -Dm755 "${srcdir}/drain-log-pre" \
+    "${pkgdir}/usr/lib/pocknix/sleep.d/pre/004-drain-log"
+  install -Dm755 "${srcdir}/drain-log-post" \
+    "${pkgdir}/usr/lib/pocknix/sleep.d/post/004-drain-log"
+  # Runs last: the display comes back after InputPlumber has re-attached its virtual pad. 005 >
+  # upstream's 004-drain-log, so this stays at the end of the post chain.
   install -Dm755 "${srcdir}/display-sleep-post" \
-    "${pkgdir}/usr/lib/pocknix/sleep.d/post/004-display"
+    "${pkgdir}/usr/lib/pocknix/sleep.d/post/005-display"
 
   install -Dm644 "${srcdir}/20-pocknix-powerkey.conf" \
     "${pkgdir}/usr/lib/systemd/logind.conf.d/20-pocknix-powerkey.conf"
@@ -87,6 +94,11 @@ package() {
   install -d "${pkgdir}/usr/lib/systemd/system/inputplumber.service.wants"
   ln -sf "../pocknix-gamepad-target.service" \
     "${pkgdir}/usr/lib/systemd/system/inputplumber.service.wants/pocknix-gamepad-target.service"
+
+  # Dual-screen boards (device.conf POCKNIX_TOUCH2_NAME): a no-op everywhere else.
+  install -Dm755 "${srcdir}/pocknix-second-screen" "${pkgdir}/usr/bin/pocknix-second-screen"
+  install -Dm644 "${srcdir}/pocknix-second-screen.service" \
+    "${pkgdir}/usr/lib/systemd/system/pocknix-second-screen.service"
 
   install -Dm644 "${srcdir}/iwd-wait-wlan0.conf" \
     "${pkgdir}/usr/lib/systemd/system/iwd.service.d/10-pocknix-wait-wlan0.conf"

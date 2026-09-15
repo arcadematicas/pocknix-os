@@ -56,11 +56,8 @@ fi
 
 # Must stay HERE, before Steam starts: Steam rewrites shortcuts.vdf on exit, so a sync against a
 # live client is clobbered.
-if command -v pocknix-steam-sync >/dev/null 2>&1; then
-  pocknix-steam-sync || echo "[pocknix-steam] Steam-library sync failed (non-fatal)"
-fi
+/usr/bin/pocknix-steam-sync || echo "[pocknix-steam] Steam-library sync failed (non-fatal)"
 
-# /etc override is sourced last so it wins.
 for _dc in /usr/lib/pocknix/device.conf /etc/pocknix/device.conf; do
   [ -r "${_dc}" ] && . "${_dc}"
 done
@@ -73,6 +70,16 @@ case "${ORIENT}" in
   left|right) GS_W="${H}"; GS_H="${W}" ;;
   *)          GS_W="${W}"; GS_H="${H}" ;;
 esac
+
+# --prefer-output pins the main panel; gamescope's modeset disables every other CRTC, which is
+# what blanks the second one. Stop pocknix-second-screen so the bottom touchscreen stays off libinput.
+GS_OUTPUT=()
+if [ -n "${POCKNIX_PANEL_OUTPUT:-}" ]; then
+  GS_OUTPUT=(--prefer-output "${POCKNIX_PANEL_OUTPUT}")
+fi
+if [ -n "${POCKNIX_TOUCH2_NAME:-}" ]; then
+  systemctl stop pocknix-second-screen.service 2>/dev/null || true
+fi
 
 # Do NOT add a core pin here: scx_lavd places the bursty threads itself and needs the littles free
 # for batch work; a hard taskset fights it.
@@ -145,7 +152,7 @@ trap cleanup EXIT
 # launch explains why we must not exec gamescope.
 env -u WAYLAND_DISPLAY \
   GAMESCOPE_FAKE_OUTPUT_MM="${PANEL_MM}" \
-  gamescope -W "${GS_W}" -H "${GS_H}" -r "${REFRESH}" --xwayland-count 2 --mangoapp --backend drm \
+  gamescope "${GS_OUTPUT[@]}" -W "${GS_W}" -H "${GS_H}" -r "${REFRESH}" --xwayland-count 2 --mangoapp --backend drm \
     --force-orientation "${ORIENT}" --force-composition-rotation -e -- \
     env LD_LIBRARY_PATH="${LDLP}" "${CLIENT}" -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -noshaders \
   >"${GS_LOG}" 2>&1 &

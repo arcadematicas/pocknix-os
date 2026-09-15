@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Retroid Pocket 5 with the Visionox VTDR6130 panel (newer units); the CH13726A
+ * init leaves this panel dark. Picked by grub's "visionox" marker file.
+ */
+
+/dts-v1/;
+
+#include "sm8250-retroidpocket-rp5.dts"
+
+/ {
+	model = "Retroid Pocket 5 Visionox";
+};
+
+&mdss_dsi0 {
+	panel@0 {
+		compatible = "vtdr6130,rp5";
+		reset-gpios = <&tlmm 75 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&i2c13 {
+	touchscreen@38 {
+		/delete-property/ touchscreen-inverted-x;
+	};
+};
+
+/*
+ * regulator-boot-on makes the core assume AVDD is already up, so prepare() never
+ * power-cycles it and this panel stays dark on a cold boot (lit only after a
+ * suspend/resume). Without it the driver's enable is a real power-on.
+ */
+&vdda_panel {
+	/delete-property/ regulator-boot-on;
+};

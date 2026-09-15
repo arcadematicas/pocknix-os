@@ -1,5 +1,5 @@
 import { call } from "@decky/api";
-import type { Config, ConfigExportResult, ConfigImportResult, ConfigPreview, LedConfig, LedSideKey, MakoStatus, OledCareStatus, SdcardInfo, SnapshotStatus, Tweaks, UpdateInfo, UpdateStatus } from "./types";
+import type { Config, ConfigExportResult, ConfigImportResult, ConfigPreview, LedConfig, LedSideKey, MakoStatus, OledCareStatus, SdcardInfo, ShareStatus, SnapshotStatus, Tweaks, UpdateInfo, UpdateStatus } from "./types";
 
 export const getConfig = () => call<[], Config>("get_config");
 export const setFanMode = (mode: string) => call<[string], Config>("set_fan_mode", mode);
@@ -20,6 +20,9 @@ export const oledCareStatus = () => call<[], OledCareStatus>("oled_care_status")
 export const runOledRefresher = (duration?: number, passes?: number) => call<[number | undefined, number | undefined], OledCareStatus>("run_oled_refresher", duration, passes);
 export const detectSdcard = () => call<[], SdcardInfo>("detect_sdcard");
 export const formatSdcard = (label: string) => call<[string], SdcardInfo>("format_sdcard", label);
+export const shareStatus = () => call<[], ShareStatus>("share_status");
+export const setShare = (on: boolean) => call<[boolean], ShareStatus>("set_share", on);
+export const installSamba = () => call<[], ShareStatus>("install_samba");
 export const checkUpdates = () => call<[], UpdateInfo[]>("check_updates");
 export const startUpdate = () => call<[], UpdateStatus>("start_update");
 export const updateStatus = () => call<[], UpdateStatus>("update_status");
