@@ -11,7 +11,6 @@ license=('GPL2')
 depends=(
     'python'
     'python-requests'
-    'gamemode'
 )
 makedepends=()
 optdepends=(
@@ -25,32 +24,37 @@ sha256sums=()
 install=deckstation-arm.install
 
 package() {
+    # Los archivos viven en el dir del paquete (no en $srcdir: source=() está
+    # vacío), así que se referencian con ${startdir}. makepkg aplana las rutas de
+    # source=() locales (get_filename -> basename), por eso no se usan ahí.
+    local sd="${startdir}"
+
     # Directorio base
     install -dm755 "${pkgdir}/opt/deckstation"
 
     # Scripts principales
-    install -Dm755 scripts/deckstation-setup.sh \
+    install -Dm755 "${sd}/scripts/deckstation-setup.sh" \
         "${pkgdir}/opt/deckstation/scripts/deckstation-setup.sh"
-    install -Dm755 scripts/deckstation-launcher.sh \
+    install -Dm755 "${sd}/scripts/deckstation-launcher.sh" \
         "${pkgdir}/opt/deckstation/scripts/deckstation-launcher.sh"
-    install -Dm755 scripts/deckstation-update.sh \
+    install -Dm755 "${sd}/scripts/deckstation-update.sh" \
         "${pkgdir}/opt/deckstation/scripts/deckstation-update.sh"
-    install -Dm755 scripts/setup_arm64_apps.py \
+    install -Dm755 "${sd}/scripts/setup_arm64_apps.py" \
         "${pkgdir}/opt/deckstation/scripts/setup_arm64_apps.py"
-    install -Dm755 scripts/lanzar.sh \
+    install -Dm755 "${sd}/scripts/lanzar.sh" \
         "${pkgdir}/opt/deckstation/scripts/lanzar.sh"
 
     # Configs de emuladores (portables, rutas relativas)
     install -dm755 "${pkgdir}/opt/deckstation/configs"
-    cp -r configs/* "${pkgdir}/opt/deckstation/configs/"
+    cp -r "${sd}/configs/"* "${pkgdir}/opt/deckstation/configs/"
 
     # Overlay: comando del sistema
-    install -Dm755 overlay/usr/bin/deckstation \
+    install -Dm755 "${sd}/overlay/usr/bin/deckstation" \
         "${pkgdir}/usr/bin/deckstation"
 
     # Overlay: entrada de escritorio (solo DeckStation/ES-DE; los emuladores se
     # lanzan desde ES-DE, no necesitan .desktop propio)
-    install -Dm644 overlay/usr/share/applications/deckstation.desktop \
+    install -Dm644 "${sd}/overlay/usr/share/applications/deckstation.desktop" \
         "${pkgdir}/usr/share/applications/deckstation.desktop"
 
     # Estructura de directorios (se crearán en post-install)
