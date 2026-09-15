@@ -233,20 +233,91 @@ const styles = `
 
 // Drives the same state as Steam's own per-game compatibility dropdown (SpecifyCompatTool +
 // app details), so never store a shadow copy: the two UIs stay in sync by construction.
+
+
+// Steam's tool list is only reachable through its react-query hook, which throws
+// without Steam's QueryClient in context; a throwaway root under Steam's provider
+// works from any tree (QAM panel, modals, import flow).
+const steam = {
+    hook: null,
+    provider: null,
+    client: null,
+    createRoot: null,
+};
+function findSteam() {
+    steam.hook || (steam.hook = DFL.findModuleExport((e) => typeof e === "function" && e.toString().includes("Failed to fetch available compat tools")));
+    steam.provider || (steam.provider = DFL.findModuleExport((e) => {
+        if (typeof e !== "function")
+            return false;
+        const src = e.toString();
+        return src.length < 400 && /\.mount\(\)/.test(src) && /unmount\(\)/.test(src) && /children/.test(src);
+    }));
+    steam.client || (steam.client = DFL.findModuleExport((e) => e && typeof e === "object" && typeof e.getQueryCache === "function" && typeof e.invalidateQueries === "function"));
+    steam.createRoot || (steam.createRoot = DFL.findModule((m) => typeof m?.createRoot === "function")?.createRoot);
+    return !!(steam.hook && steam.provider && steam.client && steam.createRoot);
+}
+class ProbeBoundary extends SP_REACT.Component {
+    constructor() {
+        super(...arguments);
+        this.state = { failed: false };
+    }
+    static getDerivedStateFromError() {
+        return { failed: true };
+    }
+    componentDidCatch(error) {
+        this.props.onError(error);
+    }
+    render() {
+        return this.state.failed ? null : this.props.children;
+    }
+}
+function steamCompatTools(appid) {
+    return new Promise((resolve) => {
+        let root = null;
+        const finish = (tools) => {
+            clearTimeout(timer);
+            resolve(tools);
+            setTimeout(() => root?.unmount(), 0);
+        };
+        const timer = setTimeout(() => finish([]), 10000);
+        const Probe = () => {
+            const [query] = steam.hook(Number(appid));
+            if (query.status === "success")
+                finish(fromSteam(query.data));
+            else if (query.status === "error")
+                finish([]);
+            return null;
+        };
+        try {
+            root = steam.createRoot(document.createElement("div"));
+            root.render(SP_REACT.createElement(ProbeBoundary, { onError: () => finish([]) }, SP_REACT.createElement(steam.provider, { client: steam.client }, SP_REACT.createElement(Probe))));
+        }
+        catch {
+            finish([]);
+        }
+    });
+}
+function fromSteam(data) {
+    return (data?.tools ?? [])
+        .filter((tool) => !tool.is_incompatible)
+        .map((tool) => ({ name: String(tool.name ?? ""), label: String(tool.display_name || tool.name || "") }))
+        .filter((tool) => tool.name);
+}
 async function availableCompatTools(appid) {
     const apps = window.SteamClient?.Apps;
-    if (!apps?.GetAvailableCompatTools)
-        return [];
     try {
-        const tools = await apps.GetAvailableCompatTools(Number(appid));
-        if (!Array.isArray(tools))
-            return [];
-        return tools
-            .map((tool) => ({
-            name: String(tool?.strToolName ?? ""),
-            label: String(tool?.strDisplayName ?? tool?.strToolName ?? ""),
-        }))
-            .filter((tool) => tool.name);
+        if (apps?.GetAvailableCompatTools) {
+            const tools = await apps.GetAvailableCompatTools(Number(appid));
+            if (!Array.isArray(tools))
+                return [];
+            return tools
+                .map((tool) => ({
+                name: String(tool?.strToolName ?? ""),
+                label: String(tool?.strDisplayName ?? tool?.strToolName ?? ""),
+            }))
+                .filter((tool) => tool.name);
+        }
+        return findSteam() ? await steamCompatTools(appid) : [];
     }
     catch {
         return [];
