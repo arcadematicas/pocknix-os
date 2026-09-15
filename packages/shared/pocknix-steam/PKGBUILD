@@ -2,7 +2,7 @@
 # gamescope launcher, and the ARM-Proton compat-tool plumbing.
 pkgname=pocknix-steam
 pkgver=0.1.0
-pkgrel=60
+pkgrel=61
 pkgdesc="Native ARM64 Steam Big Picture (gamescope) for the RP6 — installer + launcher"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -10,22 +10,24 @@ license=('GPL2')
 # wget/unzip/curl/tar/xorg-server-xvfb are build-time-only, but pocknix-steam-install runs inside
 # the image bake in THIS rootfs, so they must stay depends. The remaining oddities are dlopen deps
 # the ARM client needs and nothing on a from-scratch ALARM base pulls in; see dev/steam.md.
+# ffmpeg (ffplay) + xorg-xprop: the game-mode splash pocknix-steam-splash paints inside gamescope.
 depends=('gamescope' 'wget' 'unzip' 'curl' 'tar' 'gtk2' 'gdk-pixbuf2' 'openal' 'libcups' 'lsof'
          'noto-fonts' 'noto-fonts-cjk' 'noto-fonts-emoji' 'networkmanager' 'mangohud'
-         'pocknix-steamos-shim' 'xorg-server-xvfb')
+         'pocknix-steamos-shim' 'xorg-server-xvfb' 'ffmpeg' 'xorg-xprop')
 install=pocknix-steam.install
-source=('pocknix-steam-install' 'pocknix-steam' 'pocknix-steam-sync' 'steam' 'steam.desktop'
+source=('pocknix-steam-install' 'pocknix-steam' 'pocknix-steam-splash' 'pocknix-steam-sync' 'steam' 'steam.desktop'
         'steam-256.png' 'steam-512.png' 'registry.vdf'
         'proton-toolmanifest.vdf'
         'pocknix-proton-prep' 'pocknix-proton-prep.service'
         'pocknix-proton' 'pocknix-proton-wrapper' 'fex-profiles.json'
         'pocknix-guestos-mount' 'pocknix-guestos.service' 'graphics_provider.json')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-steam-install" "${pkgdir}/usr/bin/pocknix-steam-install"
   install -Dm755 "${srcdir}/pocknix-steam"         "${pkgdir}/usr/bin/pocknix-steam"
+  install -Dm755 "${srcdir}/pocknix-steam-splash"  "${pkgdir}/usr/lib/pocknix/pocknix-steam-splash"
   # lives here, not in pocknix-emulation: it must still run (and prune) after the layer is removed
   install -Dm755 "${srcdir}/pocknix-steam-sync"    "${pkgdir}/usr/bin/pocknix-steam-sync"
   install -Dm755 "${srcdir}/steam"                 "${pkgdir}/usr/bin/steam"
