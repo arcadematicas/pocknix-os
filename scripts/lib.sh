@@ -87,6 +87,10 @@ need_tool(){ have "$1" || die "missing required tool: $1"; }
 # --- chroot mount/teardown (idempotent) ------------------------------------
 chroot_mount() {
   local root="$1"
+  # Bind the chroot root onto itself so '/' is a real mount point: mkinitcpio's
+  # autodetect hook runs `findmnt -T /` and fails on a plain directory root
+  # ("failed to detect root filesystem") when installing the ALARM kernel.
+  mount --bind "${root}" "${root}"
   mount --bind /dev      "${root}/dev"
   mount --bind /dev/pts  "${root}/dev/pts"
   mount -t proc  proc    "${root}/proc"
@@ -115,6 +119,8 @@ chroot_resolv() {
 }
 chroot_umount() {
   local root="$1"
+  # Unmount the root bind first (it is the innermost mount), then the rest.
+  mountpoint -q "${root}" && umount -lf "${root}" || true
   for m in run sys proc dev/pts dev; do
     mountpoint -q "${root}/${m}" && umount -lf "${root}/${m}" || true
   done
