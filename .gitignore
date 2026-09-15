@@ -32,3 +32,9 @@ __pycache__/
 # editor/backup cruft
 *.bak
 *.bak.*
+
+# redundant ADSP blobs. The Odin 3 DTS reads the ADSP from qcom/sm8750/adsp.mbn
+# (the committed override in devices/sm8750/firmware/); ayn/odin3/ is only
+# referenced for aw883xx_acf.bin (speaker amp), which ships in the ROCKNIX
+# firmware overlay. The copies here are leftovers from an earlier wrong guess.
+/devices/sm8750/firmware/qcom/sm8750/ayn/
