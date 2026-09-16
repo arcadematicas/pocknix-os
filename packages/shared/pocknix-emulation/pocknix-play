@@ -57,8 +57,13 @@ case "${system}" in
   psx)                                  run_core duckstation ;;
   tg16|pcengine)                        run_core mednafen_pce_fast ;;
   supergrafx|sgfx)                      run_core mednafen_supergrafx ;;
-  neogeo|arcade|fbneo)                  run_core fbneo ;;
-  mame)                                 run_core mame2003_plus ;;
+  neogeo|fbneo)                         run_core fbneo ;;
+  cps1|cps2|cps3|arcade|mame)
+    # Same default as es_systems.xml (FinalBurn Neo), and the same alternative one selection away.
+    case "$(esde_alt_emulator "${system}")" in
+      *MAME*) run_core mame2003_plus ;;
+      *)      run_core fbneo ;;
+    esac ;;
   atari2600)                            run_core stella ;;
   atari7800)                            run_core prosystem ;;
   atarilynx)                            run_core handy ;;
