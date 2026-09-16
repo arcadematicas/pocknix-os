@@ -28,7 +28,7 @@ ROCKNIX work**, not ours:
   `0201` (its premise, a threaded IRQF_ONESHOT UFS handler, is gone upstream) and
   `1040`–`1044` (the "PCI: qcom: Add D3cold support" v5 series landed in 7.2).
 - **Our delta** (small) — SD UHS-I SDR104 (`0210`–`0212` + the RP6/Odin 2 sdhc_2 nodes),
-  `1020`/`1021` (DPU UBWC param, RP6 120Hz-only mode), and DTS edits that `make sync`
+  `1021` (RP6 120Hz-only mode), the `0010` cstate-init fix, and DTS edits that `make sync`
   does not carry (see PATCHES.md): the RP6 touchscreen at 400kHz I2C without
   `no-regmap-bulk-read` (armada-packages PR #32: the AYN workaround the RP6 inherited
   forced 63 single-byte reads per frame, capping touch at ~28Hz instead of 120Hz).
