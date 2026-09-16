@@ -7,6 +7,16 @@ STEAM="${HOME}/.local/share/Steam"
 CLIENT_DIR="${STEAM}/steamrtarm64"
 CLIENT="${CLIENT_DIR}/steam"
 
+# Elapsed-time marks for the phases the user only sees as a black screen. stdout lands in
+# pocknix-session.log, logger in the journal (`journalctl -t pocknix-steam -t pocknix-steam-splash`);
+# pocknix-steam-splash continues the same clock via POCKNIX_STEAM_T0.
+export POCKNIX_STEAM_T0="$(date +%s)"
+mark() {
+  local m="+$(( $(date +%s) - POCKNIX_STEAM_T0 ))s: $*"
+  echo "[pocknix-steam] ${m}"
+  logger -t pocknix-steam -- "${m}" 2>/dev/null || true
+}
+
 # Order matters: the client's own dir FIRST (its bundled libvpx.so.6 shadows the system one),
 # then the aarch64 shim dir.
 LDLP="${CLIENT_DIR}:${STEAM}/lib/aarch64-linux-gnu"
@@ -38,6 +48,7 @@ fi
 
 # Must run BEFORE gamescope: Steam reads compatibilitytools.d only at startup.
 /usr/bin/pocknix-proton-prep
+mark "proton prep done"
 
 # A session switch SIGTERMs gamescope but the Steam client re-parents and survives holding its
 # single-instance lock, so the next launch exits "Steam is already running" and gamescope
@@ -57,6 +68,7 @@ fi
 # Must stay HERE, before Steam starts: Steam rewrites shortcuts.vdf on exit, so a sync against a
 # live client is clobbered.
 /usr/bin/pocknix-steam-sync || echo "[pocknix-steam] Steam-library sync failed (non-fatal)"
+mark "library sync done"
 
 for _dc in /usr/lib/pocknix/device.conf /etc/pocknix/device.conf; do
   [ -r "${_dc}" ] && . "${_dc}"
@@ -87,11 +99,15 @@ fi
 # Log to a file, never the tty: tty1 is what shows between compositors on a session switch and
 # must stay blank. Do NOT exec gamescope either, since the session switch pkills it by name.
 GS_LOG="${HOME}/pocknix-steam.log"
+# The child goes through pocknix-steam-splash: it paints the wordmark inside gamescope until Big
+# Picture maps (gamescope is black until a client presents), then execs the Steam command below.
+mark "starting gamescope"
 # gamepadui sizes its UI from the output's physical mm; the ~96 DPI default reads as a desktop
 # monitor and renders the UI tiny. -noshaders keeps fossilize from stealing CPU during play.
 env -u WAYLAND_DISPLAY \
   GAMESCOPE_FAKE_OUTPUT_MM="${PANEL_MM}" \
   gamescope "${GS_OUTPUT[@]}" -W "${GS_W}" -H "${GS_H}" -r "${REFRESH}" --xwayland-count 2 --mangoapp --backend drm \
     --force-orientation "${ORIENT}" --force-composition-rotation -e -- \
+    /usr/lib/pocknix/pocknix-steam-splash "${GS_W}x${GS_H}" -- \
     env LD_LIBRARY_PATH="${LDLP}" "${CLIENT}" -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -noshaders \
   >"${GS_LOG}" 2>&1
