@@ -38,3 +38,6 @@ __pycache__/
 # referenced for aw883xx_acf.bin (speaker amp), which ships in the ROCKNIX
 # firmware overlay. The copies here are leftovers from an earlier wrong guess.
 /devices/sm8750/firmware/qcom/sm8750/ayn/
+
+# 105 MB boot animation: kept out of git (see pocknix-odin3-support docs)
+/overlay/bootanimation-odin3.zip

@@ -22,12 +22,15 @@ done
 [ -n "${SENSORS}" ] || { echo "pocknix-fancontrol: no cpu/gpu thermal zones, exiting"; exit 0; }
 
 # PWM 0-255 against millidegC, highest first; only the thresholds differ per mode.
+# "off" (ROCKNIX UI + CLI, also accepted per-game) is implemented as thresholds no
+# temperature can cross, so the scan below never matches and PWM stays at 0 (the SPEED
+# variable's initial value): the fan is pinned off no matter how hot the SoC gets.
 SPEEDS="255 204 153 119 102 77 51 0"
 
 # Per-game override, "<pid> <fan> <lavd>" from pocknix-proton-wrapper; "-" = not overridden.
 # The pid IS the game session, so a dead pid means no override and exits need no cleanup step.
 effective_mode() {
-  if read -r pid fan _ 2>/dev/null < "${GAME_MODE_FILE}"; then
+  if [ -f "${GAME_MODE_FILE}" ] && read -r pid fan _ < "${GAME_MODE_FILE}"; then
     if [ -n "${pid}" ] && [ "${fan}" != "-" ] && [ -d "/proc/${pid}" ]; then
       printf '%s\n' "${fan}"
       return
@@ -40,6 +43,7 @@ curve_temps() {
   case "$(effective_mode)" in
     performance) echo "80000 75000 70000 65000 60000 55000 50000 0" ;;
     moderate)    echo "85000 80000 75000 70000 65000 60000 55000 0" ;;
+    off)         echo "1000000 1000000 1000000 1000000 1000000 1000000 1000000 1000000" ;;  # unreachable -> SPEED stays 0
     *)           echo "95000 85000 80000 75000 70000 65000 60000 0" ;;  # quiet (default)
   esac
 }

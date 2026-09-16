@@ -7,7 +7,7 @@
 pkgname=gamescope
 epoch=1
 pkgver=3.16.0.rocknix.20260802.6644cc9
-pkgrel=3
+pkgrel=4
 _commit=6644cc9a07d8ba937003deae8bd7c28a490d0c64
 install=gamescope.install
 pkgdesc="SteamOS session compositing WM — patched (rotation-shader, for msm/rotated panels)"
@@ -31,8 +31,10 @@ source=("gamescope::git+https://github.com/ValveSoftware/gamescope.git#commit=${
         '0004-DRMBackend-Add-GAMESCOPE_FAKE_OUTPUT_MM-env-to-set-c.patch'
         '0006-steamcompmgr-fix-gamepad-cursor-sprite-frozen-via-XTest.patch'
         '0007-Add-composited-output-rotation-for-displays-that-can.patch'
-        '0008-steamcompmgr-classify-the-interactive-overlay-by-out.patch')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        '0008-steamcompmgr-classify-the-interactive-overlay-by-out.patch'
+        # NUESTRO: hace que el atom GAMESCOPE_FPS_LIMIT del QAM se quede (ver el parche)
+        '0009-fps-limit-atom-persist.patch')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {
   cd gamescope
@@ -43,6 +45,8 @@ prepare() {
   patch -p1 < "${srcdir}/0006-steamcompmgr-fix-gamepad-cursor-sprite-frozen-via-XTest.patch"
   patch -p1 < "${srcdir}/0007-Add-composited-output-rotation-for-displays-that-can.patch"
   patch -p1 < "${srcdir}/0008-steamcompmgr-classify-the-interactive-overlay-by-out.patch"
+  # NUESTRO (pocknix-odin3-support): el QAM frame limiter no tenia efecto en HW.
+  patch -p1 < "${srcdir}/0009-fps-limit-atom-persist.patch"
 }
 
 build() {

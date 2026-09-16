@@ -26,6 +26,15 @@ TARBALL="${CACHE_DIR}/${ALARM_TARBALL}"
 REPO_DB="pocknix.db.tar.gz"
 SHARED_REPO_DB="pocknix-shared.db.tar.gz"
 
+# Packages that exist ONLY to feed the OPT-IN emulation layer (POCKNIX_EMULATION=1 bakes it into
+# the image; the default image ships without it and installs it on demand from Pocknix Tools).
+# They are heavy source builds and several cannot build under qemu at all — azahar dies with a
+# gcc ICE (Segmentation fault in cc1plus), armsx2-bin's nightly URL 404s, and es-de / eden-bin /
+# rpcs3-bin / vita3k-bin / xemu-bin reference sources that are not in the repo — which costs
+# ~1 h per image build for packages the image never installs. Skipped unless requested; see the
+# guard in the package loop below.
+POCKNIX_EMULATION_PKGS="armsx2-bin azahar cemu dolphin-emu eden-bin es-de libretro-cores-pocknix pocknix-emulation pocknix-emulation-full retroarch-autoconfig-pocknix retroarch-shaders-pocknix rpcs3-bin vita3k-bin wxwidgets-pocknix xemu-bin"
+
 cleanup() { chroot_umount "${BROOT}" 2>/dev/null || true
             mountpoint -q "${BROOT}/localrepo" && umount "${BROOT}/localrepo" 2>/dev/null || true
             mountpoint -q "${BROOT}/localrepo-shared" && umount "${BROOT}/localrepo-shared" 2>/dev/null || true; }
@@ -102,6 +111,18 @@ setup_chroot() {
   fi
   printf 'builder ALL=(ALL) NOPASSWD: ALL\n' > "${BROOT}/etc/sudoers.d/builder"
   chmod 0440 "${BROOT}/etc/sudoers.d/builder"
+
+  # Build with EVERY core. The ALARM base ships makepkg.conf with MAKEFLAGS commented out, so
+  # `make` runs SERIAL and a full image build takes hours instead of minutes — measured on a
+  # 16-core host: kernel 40 min -> 5 min, gtk2/plasma-mobile/dolphin 3 h -> ~30 min each. This
+  # block is idempotent on purpose: reused chroots, and chroots created before it existed, get
+  # repaired on the next run instead of needing a rebuild. JOBS overrides nproc.
+  jobs="${JOBS:-$(nproc 2>/dev/null || echo 4)}"
+  if grep -qE '^#?MAKEFLAGS=' "${BROOT}/etc/makepkg.conf"; then
+    sed -i "s|^#\?MAKEFLAGS=.*|MAKEFLAGS=\"-j${jobs}\"|" "${BROOT}/etc/makepkg.conf"
+  else
+    printf '\nMAKEFLAGS="-j%s"\n' "${jobs}" >> "${BROOT}/etc/makepkg.conf"
+  fi
 
   # Local [pocknix] repo so a package can depend on another locally-built one
   # (e.g. pocknix-steam -> gamescope, gtk2). Points at the bind-mounted /localrepo.
@@ -359,6 +380,16 @@ main() {
   for pkgdir in "${PACKAGES_DIR}"/shared/*/ "${PACKAGES_DIR}"/soc/*/ "${POCKNIX_ROOT}"/devices/*/packages/*/; do
     [ -f "${pkgdir}/PKGBUILD" ] || continue
     name="$(basename "${pkgdir}")"
+    # Emulation layer is opt-in: skip its packages unless it was explicitly requested (see
+    # POCKNIX_EMULATION_PKGS at the top of this file for why).
+    if [ "${POCKNIX_EMULATION:-0}" != "1" ]; then
+      case " ${POCKNIX_EMULATION_PKGS} " in
+        *" ${name} "*)
+          log "skip: ${name} (emulation layer not requested — POCKNIX_EMULATION=1 builds it)"
+          continue
+          ;;
+      esac
+    fi
     case "${pkgdir}" in */devices/*/packages/*)
       devdir="$(dirname "$(dirname "${pkgdir%/}")")"
       devsoc="$(unset SOC; . "${devdir}/profile.conf" >/dev/null 2>&1; printf '%s' "${SOC}")"
