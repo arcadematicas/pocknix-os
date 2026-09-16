@@ -7,9 +7,7 @@ STEAM="${HOME}/.local/share/Steam"
 CLIENT_DIR="${STEAM}/steamrtarm64"
 CLIENT="${CLIENT_DIR}/steam"
 
-# Elapsed-time marks for the phases the user only sees as a black screen. stdout lands in
-# pocknix-session.log, logger in the journal (`journalctl -t pocknix-steam -t pocknix-steam-splash`);
-# pocknix-steam-splash continues the same clock via POCKNIX_STEAM_T0.
+# Elapsed marks for the phases the user sees as a black screen; the splash shares the clock.
 export POCKNIX_STEAM_T0="$(date +%s)"
 mark() {
   local m="+$(( $(date +%s) - POCKNIX_STEAM_T0 ))s: $*"
@@ -99,8 +97,7 @@ fi
 # Log to a file, never the tty: tty1 is what shows between compositors on a session switch and
 # must stay blank. Do NOT exec gamescope either, since the session switch pkills it by name.
 GS_LOG="${HOME}/pocknix-steam.log"
-# The child goes through pocknix-steam-splash: it paints the wordmark inside gamescope until Big
-# Picture maps (gamescope is black until a client presents), then execs the Steam command below.
+# gamescope paints black until a client presents; the splash covers that, then execs Steam.
 mark "starting gamescope"
 # gamepadui sizes its UI from the output's physical mm; the ~96 DPI default reads as a desktop
 # monitor and renders the UI tiny. -noshaders keeps fossilize from stealing CPU during play.

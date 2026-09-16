@@ -1,28 +1,17 @@
 #!/bin/bash
-# pocknix-steam-splash — gamescope's child wrapper for game mode: paint the Pocknix wordmark until
-# Steam's Big Picture window is up, then get out of the way.
+# pocknix-steam-splash <WxH> -- <steam command...>: gamescope's child for game mode. Maps the
+# wordmark until Big Picture is up, then execs Steam so gamescope's child pid is still Steam.
 #
-# gamescope paints black until a client presents a frame, and Steam's first frame can be a long
-# way off (client update, steamwebhelper start-up, Decky injection). This runs INSIDE gamescope:
-# it maps a fullscreen ffplay window first, then execs the real Steam command so gamescope's child
-# pid is still Steam.
-#
-# gamescope -e is Steam-controlled focus (steamcompmgr GetPossibleFocusWindows /
-# pick_primary_focus_and_override): only windows with a Steam app id are focus candidates, and
-# nothing is focused until GAMESCOPECTRL_BASELAYER_APPID names an app. So the splash speaks that
-# protocol: its window gets STEAM_GAME=769 (Steam's own id, so Steam sees "Steam focused", not a
-# game) and the base layer is set to 769 if nobody set it yet. Steam rewrites the base layer when it
-# starts, and Big Picture (also 769, mapped later) outranks the splash by map order, so focus moves
-# by itself; the watcher only reaps ffplay once another 769 window exists.
-#
-# usage: pocknix-steam-splash <WxH> -- <steam command...>
+# Under gamescope -e only windows with a Steam app id can take focus, and nothing is focused until
+# GAMESCOPECTRL_BASELAYER_APPID names one. So the window is tagged STEAM_GAME=769 (Steam's own id)
+# and the base layer claimed if free; Big Picture is also 769 and maps later, so it outranks the
+# splash by map order and the watcher reaps ffplay once another 769 window exists.
 set -u
 
 TAG=pocknix-steam-splash
 THEME=/usr/share/plymouth/themes/pocknix
 WATERMARK="${THEME}/watermark.png"
-# Same ground and wordmark placement as the plymouth theme (WatermarkHorizontalAlignment=.5,
-# WatermarkVerticalAlignment=.96), so boot splash -> game mode reads as one screen.
+# Ground + wordmark placement match the plymouth theme (alignment .5/.96): boot -> game mode is one screen.
 BG=0x202126
 WINDOW_NAME=pocknix-steam-splash
 STEAM_APPID=769
@@ -34,7 +23,6 @@ if [ -z "${SIZE}" ] || [ $# -eq 0 ]; then
   exit 2
 fi
 
-# Elapsed seconds from the launcher's start, so all phases share one origin.
 T0="${POCKNIX_STEAM_T0:-$(date +%s)}"
 mark() {
   local msg="+$(( $(date +%s) - T0 ))s: $*"
@@ -42,8 +30,7 @@ mark() {
   logger -t "${TAG}" -- "${msg}" 2>/dev/null || true
 }
 
-# True when GAMESCOPE_FOCUSABLE_WINDOWS (root, [window, appid, pid] triplets) lists a window with
-# Steam's app id owned by a pid other than $1. Fails (non-zero) when the X connection is gone.
+# GAMESCOPE_FOCUSABLE_WINDOWS is [window, appid, pid] triplets; 2 = the X connection is gone.
 another_steam_window() {
   local list
   list="$(xprop -root -notype GAMESCOPE_FOCUSABLE_WINDOWS 2>/dev/null)" || return 2
@@ -53,36 +40,30 @@ another_steam_window() {
 }
 
 if [ -r "${WATERMARK}" ] && command -v ffplay >/dev/null 2>&1 && command -v xprop >/dev/null 2>&1; then
-  # lavfi: an endless flat-colour source at 1 fps (~1% of a core, ~225 MB transient for the
-  # 1080p frame buffers) with the wordmark overlaid;
-  # the still image ends after one frame and overlay's default eof_action=repeat keeps it.
-  # SDL_VIDEODRIVER=x11: the app-id protocol above is an X property one.
-  # -fs, not -x/-y: gamescope fits the fullscreen window to the output whatever the size.
+  # The still ends after one frame; overlay's default eof_action=repeat keeps it on screen.
+  # SDL_VIDEODRIVER=x11: the app-id tag is an X property. -fs, not -x/-y: gamescope fits it.
   graph="color=c=${BG}:s=${SIZE}:r=1[bg];movie=${WATERMARK}[wm];[bg][wm]overlay=(W-w)/2:(H-h)*0.96"
 
-  # Double-forked: this shell execs Steam below, and Steam never reaps children it did not spawn,
-  # so anything left as our child would end up a zombie under Steam. Orphaned instead, ffplay and
-  # the watcher are adopted by gamescopereaper (a child subreaper), which does reap.
+  # Double fork: Steam (exec'd below) never reaps inherited children, so orphan these to
+  # gamescopereaper rather than leave zombies under Steam.
   ( (
     SDL_VIDEODRIVER=x11 ffplay -hide_banner -loglevel error -nostats \
       -fs -noborder -an -sn -window_title "${WINDOW_NAME}" -f lavfi -i "${graph}" \
       >/dev/null 2>&1 &
     splash_pid=$!
 
-    # Wait for ffplay's window (it exists once the first frame is decoded), then tag it.
     for _ in $(seq 1 50); do
       kill -0 "${splash_pid}" 2>/dev/null || exit 0
       xprop -name "${WINDOW_NAME}" -f STEAM_GAME 32c -set STEAM_GAME "${STEAM_APPID}" 2>/dev/null && break
       sleep 0.2
     done
-    # Only claim the base layer when it is unclaimed: a Steam that is already up owns it.
+    # A Steam that is already up owns the base layer.
     if ! xprop -root GAMESCOPECTRL_BASELAYER_APPID 2>/dev/null | grep -q '= [0-9]'; then
       xprop -root -f GAMESCOPECTRL_BASELAYER_APPID 32c -set GAMESCOPECTRL_BASELAYER_APPID "${STEAM_APPID}" 2>/dev/null || true
     fi
     mark "splash up (pid ${splash_pid})"
 
-    # Reaper. Losing the X connection (gamescope gone) ends the loop; so does ffplay exiting on
-    # its own. No timeout on purpose: a stuck update should keep the splash, not go black.
+    # No timeout on purpose: a stuck Steam update should keep the splash, not go black.
     while kill -0 "${splash_pid}" 2>/dev/null; do
       another_steam_window "${splash_pid}"
       case $? in
