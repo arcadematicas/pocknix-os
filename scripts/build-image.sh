@@ -25,6 +25,29 @@ render_pacman_conf() {
   local out="$1"
   log "rendering pacman.conf (base: ${POCKNIX_BASE_SNAPSHOT:-live ALARM})"
   render_base_pacman_conf "${out}"
+  # ALARM fallback: in pinned mode render_base_pacman_conf leaves ONLY
+  # [pocknix-base], so a device whose pocknix repos are unreachable (or that
+  # lacks a per-SoC tree) cannot install ANY package. Always ship the live
+  # ALARM repos BELOW the pocknix stanzas: pocknix still wins name resolution
+  # (it comes first), ALARM guarantees installability.
+  if ! grep -q '^\[core\]' "${out}"; then
+    cat >> "${out}" <<'EOF'
+
+# Live ALARM fallback (below the pinned base): lets a device install packages
+# even when the pocknix repos are unreachable. Resolves via the ALARM mirrorlist.
+[core]
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+
+[alarm]
+Include = /etc/pacman.d/mirrorlist
+
+[aur]
+Include = /etc/pacman.d/mirrorlist
+EOF
+  fi
 }
 
 # The local repos live on the host; we bind-mount them to /localrepo{,-shared}
@@ -165,13 +188,27 @@ install_local_packages() {
   # one tree for all SoCs. Order matters: per-SoC FIRST so a tuned package could
   # never be shadowed by a same-name shared one.
   if [ -n "${POCKNIX_REPO_URL}" ]; then
-    log "shipping [pocknix] -> ${POCKNIX_REPO_URL}/${SOC} + [pocknix-shared] -> ${POCKNIX_REPO_URL}/shared (SigLevel ${POCKNIX_REPO_SIGLEVEL})"
     # anchor = the first base repo: [core] on a live-ALARM conf, [pocknix-base]
     # on a pinned one (which has no [core] at all — the old sed silently
     # no-opped there and the image shipped with NO [pocknix] stanza)
     local anchor="core"
     grep -q '^\[pocknix-base\]' "${root}/etc/pacman.conf" && anchor="pocknix-base"
-    sed -i "0,/^\[${anchor}\]/s||[pocknix]\nSigLevel = ${POCKNIX_REPO_SIGLEVEL}\nServer = ${POCKNIX_REPO_URL}/${SOC}\n\n[pocknix-shared]\nSigLevel = ${POCKNIX_REPO_SIGLEVEL}\nServer = ${POCKNIX_REPO_URL}/shared\n\n[${anchor}]|" \
+    # The per-SoC [pocknix] stanza is only shipped when the repo actually exists
+    # (POCKNIX_SHIP_SOC_REPO=1). Upstream publishes sm8550/sm8250 but NOT sm8750
+    # (the Odin 3 support is our unmerged PR #81), so shipping it there makes
+    # every `pacman -Sy`/`-Syu` on the device FAIL with a 404 even though the
+    # other repos synced fine. [pocknix-shared] + [pocknix-base] + the ALARM
+    # fallback (render_pacman_conf) keep the device fully usable meanwhile.
+    local stanza=""
+    if [ "${POCKNIX_SHIP_SOC_REPO:-1}" = 1 ]; then
+      log "shipping [pocknix] -> ${POCKNIX_REPO_URL}/${SOC} (SigLevel ${POCKNIX_REPO_SIGLEVEL})"
+      stanza+="[pocknix]\nSigLevel = ${POCKNIX_REPO_SIGLEVEL}\nServer = ${POCKNIX_REPO_URL}/${SOC}\n\n"
+    else
+      log "skipping [pocknix] -> ${POCKNIX_REPO_URL}/${SOC} (POCKNIX_SHIP_SOC_REPO=0: repo not published)"
+    fi
+    log "shipping [pocknix-shared] -> ${POCKNIX_REPO_URL}/shared (SigLevel ${POCKNIX_REPO_SIGLEVEL})"
+    stanza+="[pocknix-shared]\nSigLevel = ${POCKNIX_REPO_SIGLEVEL}\nServer = ${POCKNIX_REPO_URL}/shared\n\n[${anchor}]"
+    sed -i "0,/^\[${anchor}\]/s||${stanza}|" \
       "${root}/etc/pacman.conf"
     # Trust the repo key out of the box: bake the exported public key + lsign it, so a
     # fresh image can `pacman -Syu` without a manual pacman-key dance.
