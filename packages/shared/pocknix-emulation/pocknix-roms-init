@@ -40,7 +40,7 @@ fi
 SYSTEMS=(
   nes snes n64 gb gbc gba nds n3ds
   genesis megadrive mastersystem gamegear segacd saturn dreamcast
-  tg16 pcengine neogeo arcade mame
+  tg16 pcengine neogeo cps1 cps2 cps3 arcade mame
   atari2600 atari7800 atarilynx atarijaguar wonderswan
   psx ps2 ps3 psp psvita
   gc wii wiiu switch xbox

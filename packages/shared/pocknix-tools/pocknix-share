@@ -45,7 +45,7 @@ case "${1:-status}" in
     # pkexec's text agent, broken on polkit 127 (polkit#686) - see dev/desktop.md.
     need_root
     is_installed && { echo "installed=yes"; exit 0; }
-    pacman -S --needed --noconfirm samba
+    pacman -Syu --needed --noconfirm samba
     echo "installed=yes"
     ;;
   on)

@@ -7,6 +7,14 @@ STEAM="${HOME}/.local/share/Steam"
 CLIENT_DIR="${STEAM}/steamrtarm64"
 CLIENT="${CLIENT_DIR}/steam"
 
+# Elapsed marks for the phases the user sees as a black screen; the splash shares the clock.
+export POCKNIX_STEAM_T0="$(date +%s)"
+mark() {
+  local m="+$(( $(date +%s) - POCKNIX_STEAM_T0 ))s: $*"
+  echo "[pocknix-steam] ${m}"
+  logger -t pocknix-steam -- "${m}" 2>/dev/null || true
+}
+
 # Order matters: the client's own dir FIRST (its bundled libvpx.so.6 shadows the system one),
 # then the aarch64 shim dir.
 LDLP="${CLIENT_DIR}:${STEAM}/lib/aarch64-linux-gnu"
@@ -38,6 +46,7 @@ fi
 
 # Must run BEFORE gamescope: Steam reads compatibilitytools.d only at startup.
 /usr/bin/pocknix-proton-prep
+mark "proton prep done"
 
 # A session switch SIGTERMs gamescope but the Steam client re-parents and survives holding its
 # single-instance lock, so the next launch exits "Steam is already running" and gamescope
@@ -57,6 +66,7 @@ fi
 # Must stay HERE, before Steam starts: Steam rewrites shortcuts.vdf on exit, so a sync against a
 # live client is clobbered.
 /usr/bin/pocknix-steam-sync || echo "[pocknix-steam] Steam-library sync failed (non-fatal)"
+mark "library sync done"
 
 for _dc in /usr/lib/pocknix/device.conf /etc/pocknix/device.conf; do
   [ -r "${_dc}" ] && . "${_dc}"
@@ -64,8 +74,8 @@ done
 W="${POCKNIX_PANEL_W:-1080}"; H="${POCKNIX_PANEL_H:-1920}"
 REFRESH="${POCKNIX_PANEL_REFRESH:-120}"; ORIENT="${POCKNIX_PANEL_ORIENT:-left}"
 PANEL_MM="${POCKNIX_PANEL_MM:-177x100}"
-# device.conf carries the panel's NATIVE portrait geometry; composite rotation wants
-# -W/-H in LOGICAL landscape, so transpose for 90/270.
+# device.conf carries the panel's NATIVE portrait geometry; gamescope wants -W/-H in
+# LOGICAL landscape, so transpose for 90/270.
 case "${ORIENT}" in
   left|right) GS_W="${H}"; GS_H="${W}" ;;
   *)          GS_W="${W}"; GS_H="${H}" ;;
@@ -81,12 +91,21 @@ if [ -n "${POCKNIX_TOUCH2_NAME:-}" ]; then
   systemctl stop pocknix-second-screen.service 2>/dev/null || true
 fi
 
+# Rotation autodetects (scanout when the plane can, else composited; dev/graphics.md).
+# Panels past the DPU rotator's 1088-line cap must opt in here or scan out black.
+GS_ROTATE=()
+if [ "${POCKNIX_PANEL_ROTATE_SHADER:-0}" = "1" ]; then
+  GS_ROTATE=(--force-composition-rotation)
+fi
+
 # Do NOT add a core pin here: scx_lavd places the bursty threads itself and needs the littles free
 # for batch work; a hard taskset fights it.
 
 # Log to a file, never the tty: tty1 is what shows between compositors on a session switch and
 # must stay blank. Do NOT exec gamescope either, since the session switch pkills it by name.
 GS_LOG="${HOME}/pocknix-steam.log"
+# gamescope paints black until a client presents; the splash covers that, then execs Steam.
+mark "starting gamescope"
 # gamepadui sizes its UI from the output's physical mm; the ~96 DPI default reads as a desktop
 # monitor and renders the UI tiny. -noshaders keeps fossilize from stealing CPU during play.
 
@@ -153,7 +172,8 @@ trap cleanup EXIT
 env -u WAYLAND_DISPLAY \
   GAMESCOPE_FAKE_OUTPUT_MM="${PANEL_MM}" \
   gamescope "${GS_OUTPUT[@]}" -W "${GS_W}" -H "${GS_H}" -r "${REFRESH}" --xwayland-count 2 --mangoapp --backend drm \
-    --force-orientation "${ORIENT}" --force-composition-rotation -e -- \
+    --force-orientation "${ORIENT}" "${GS_ROTATE[@]}" -e -- \
+    /usr/lib/pocknix/pocknix-steam-splash "${GS_W}x${GS_H}" -- \
     env LD_LIBRARY_PATH="${LDLP}" "${CLIENT}" -gamepadui -steamos3 -steampal -steamdeck -noverifyfiles -noshaders \
   >"${GS_LOG}" 2>&1 &
 GS_PID=$!
