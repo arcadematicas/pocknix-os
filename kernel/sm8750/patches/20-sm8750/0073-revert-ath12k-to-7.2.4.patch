@@ -1,0 +1,1561 @@
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/ahb.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/ahb.c
+--- a/drivers/net/wireless/ath/ath12k/ahb.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/ahb.c	2026-09-07 17:37:28.000000000 +0200
+@@ -12,7 +12,6 @@
+ #include <linux/remoteproc.h>
+ #include <linux/soc/qcom/mdt_loader.h>
+ #include <linux/soc/qcom/smem_state.h>
+-#include <linux/of_reserved_mem.h>
+ #include "ahb.h"
+ #include "debug.h"
+ #include "hif.h"
+@@ -339,25 +338,24 @@
+ 	char fw2_name[ATH12K_USERPD_FW_NAME_LEN];
+ 	struct device *dev = ab->dev;
+ 	const struct firmware *fw, *fw2;
++	struct reserved_mem *rmem = NULL;
+ 	unsigned long time_left;
+ 	phys_addr_t mem_phys;
+-	struct resource res;
+ 	void *mem_region;
+ 	size_t mem_size;
+ 	u32 pasid;
+ 	int ret;
+ 
+-	ret = of_reserved_mem_region_to_resource_byname(dev->of_node, "q6-region",
+-							&res);
+-	if (ret)
+-		return ret;
++	rmem = ath12k_core_get_reserved_mem(ab, 0);
++	if (!rmem)
++		return -ENODEV;
+ 
+-	mem_phys = res.start;
+-	mem_size = resource_size(&res);
++	mem_phys = rmem->base;
++	mem_size = rmem->size;
+ 	mem_region = devm_memremap(dev, mem_phys, mem_size, MEMREMAP_WC);
+ 	if (IS_ERR(mem_region)) {
+-		ath12k_err(ab, "unable to map memory region: %pa+%zx\n",
+-			   &res.start, mem_size);
++		ath12k_err(ab, "unable to map memory region: %pa+%pa\n",
++			   &rmem->base, &rmem->size);
+ 		return PTR_ERR(mem_region);
+ 	}
+ 
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/core.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/core.c
+--- a/drivers/net/wireless/ath/ath12k/core.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/core.c	2026-09-07 17:37:28.000000000 +0200
+@@ -49,7 +49,7 @@
+ 		.dp_params = {
+ 			.tx_comp_ring_size = 32768,
+ 			.rxdma_monitor_buf_ring_size = 4096,
+-			.rxdma_monitor_dst_ring_size = 8192,
++			.rxdma_monitor_dst_ring_size = 8092,
+ 			.num_pool_tx_desc = 32768,
+ 			.rx_desc_count = 12288,
+ 		},
+@@ -637,6 +637,31 @@
+ }
+ EXPORT_SYMBOL(ath12k_core_get_max_peers_per_radio);
+ 
++struct reserved_mem *ath12k_core_get_reserved_mem(struct ath12k_base *ab,
++						  int index)
++{
++	struct device *dev = ab->dev;
++	struct reserved_mem *rmem;
++	struct device_node *node;
++
++	node = of_parse_phandle(dev->of_node, "memory-region", index);
++	if (!node) {
++		ath12k_dbg(ab, ATH12K_DBG_BOOT,
++			   "failed to parse memory-region for index %d\n", index);
++		return NULL;
++	}
++
++	rmem = of_reserved_mem_lookup(node);
++	of_node_put(node);
++	if (!rmem) {
++		ath12k_dbg(ab, ATH12K_DBG_BOOT,
++			   "unable to get memory-region for index %d\n", index);
++		return NULL;
++	}
++
++	return rmem;
++}
++
+ static inline
+ void ath12k_core_to_group_ref_get(struct ath12k_base *ab)
+ {
+@@ -1499,7 +1524,7 @@
+ 			complete_all(&ar->scan.completed);
+ 			complete(&ar->scan.on_channel);
+ 			complete(&ar->peer_assoc_done);
+-			ath12k_peer_delete_wait_flush(ar);
++			complete(&ar->peer_delete_done);
+ 			complete(&ar->install_key_done);
+ 			complete(&ar->vdev_setup_done);
+ 			complete(&ar->vdev_delete_done);
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/core.h k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/core.h
+--- a/drivers/net/wireless/ath/ath12k/core.h	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/core.h	2026-09-07 17:37:28.000000000 +0200
+@@ -666,8 +666,7 @@
+ 
+ 	/* protects the radio specific data like debug stats, ppdu_stats_info stats,
+ 	 * vdev_stop_status info, scan data, ath12k_sta info, ath12k_link_vif info,
+-	 * channel context data, test mode data, regd_channel_update_queue,
+-	 * peer_delete_waits.
++	 * channel context data, survey info, test mode data, regd_channel_update_queue.
+ 	 */
+ 	spinlock_t data_lock;
+ 
+@@ -689,7 +688,7 @@
+ 	u8 radio_idx;
+ 
+ 	struct completion peer_assoc_done;
+-	struct list_head peer_delete_waits;
++	struct completion peer_delete_done;
+ 
+ 	int install_key_status;
+ 	struct completion install_key_done;
+@@ -723,6 +722,7 @@
+ 	 * avoid reporting garbage data.
+ 	 */
+ 	bool ch_info_can_report_survey;
++	struct survey_info survey[ATH12K_NUM_CHANS];
+ 	struct completion bss_survey_done;
+ 
+ 	struct work_struct regd_update_work;
+@@ -792,11 +792,6 @@
+ 	 */
+ 	struct mutex hw_mutex;
+ 	enum ath12k_hw_state state;
+-
+-	/* protects survey[] shared across radios of this hw. */
+-	spinlock_t survey_lock;
+-	struct survey_info survey[ATH12K_NUM_CHANS];
+-
+ 	bool regd_updated;
+ 	bool use_6ghz_regd;
+ 	bool host_alloc_ml_id;
+@@ -1302,6 +1297,8 @@
+ void ath12k_fw_stats_bcn_free(struct list_head *head);
+ void ath12k_fw_stats_free(struct ath12k_fw_stats *stats);
+ void ath12k_fw_stats_reset(struct ath12k *ar);
++struct reserved_mem *ath12k_core_get_reserved_mem(struct ath12k_base *ab,
++						  int index);
+ enum ath12k_qmi_mem_mode ath12k_core_get_memory_mode(struct ath12k_base *ab);
+ 
+ static inline const char *ath12k_scan_state_str(enum ath12k_scan_state state)
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/dp_tx.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/dp_tx.c
+--- a/drivers/net/wireless/ath/ath12k/dp_tx.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/dp_tx.c	2026-09-07 17:37:28.000000000 +0200
+@@ -82,52 +82,6 @@
+ }
+ EXPORT_SYMBOL(ath12k_dp_tx_get_encrypt_type);
+ 
+-u8 ath12k_dp_tx_crypto_iv_len(enum hal_encrypt_type enc_type)
+-{
+-	switch (enc_type) {
+-	case HAL_ENCRYPT_TYPE_TKIP_NO_MIC:
+-	case HAL_ENCRYPT_TYPE_TKIP_MIC:
+-		return IEEE80211_TKIP_IV_LEN;
+-	case HAL_ENCRYPT_TYPE_CCMP_128:
+-		return IEEE80211_CCMP_HDR_LEN;
+-	case HAL_ENCRYPT_TYPE_CCMP_256:
+-		return IEEE80211_CCMP_256_HDR_LEN;
+-	case HAL_ENCRYPT_TYPE_GCMP_128:
+-	case HAL_ENCRYPT_TYPE_AES_GCMP_256:
+-		return IEEE80211_GCMP_HDR_LEN;
+-	case HAL_ENCRYPT_TYPE_WEP_40:
+-	case HAL_ENCRYPT_TYPE_WEP_104:
+-	case HAL_ENCRYPT_TYPE_WEP_128:
+-		return IEEE80211_WEP_IV_LEN;
+-	default:
+-		return 0;
+-	}
+-}
+-EXPORT_SYMBOL(ath12k_dp_tx_crypto_iv_len);
+-
+-u8 ath12k_dp_tx_crypto_icv_len(enum hal_encrypt_type enc_type)
+-{
+-	switch (enc_type) {
+-	case HAL_ENCRYPT_TYPE_CCMP_128:
+-		return IEEE80211_CCMP_MIC_LEN;
+-	case HAL_ENCRYPT_TYPE_CCMP_256:
+-		return IEEE80211_CCMP_256_MIC_LEN;
+-	case HAL_ENCRYPT_TYPE_GCMP_128:
+-	case HAL_ENCRYPT_TYPE_AES_GCMP_256:
+-		return IEEE80211_GCMP_MIC_LEN;
+-	case HAL_ENCRYPT_TYPE_TKIP_NO_MIC:
+-	case HAL_ENCRYPT_TYPE_TKIP_MIC:
+-		return IEEE80211_TKIP_ICV_LEN;
+-	case HAL_ENCRYPT_TYPE_WEP_40:
+-	case HAL_ENCRYPT_TYPE_WEP_104:
+-	case HAL_ENCRYPT_TYPE_WEP_128:
+-		return IEEE80211_WEP_ICV_LEN;
+-	default:
+-		return 0;
+-	}
+-}
+-EXPORT_SYMBOL(ath12k_dp_tx_crypto_icv_len);
+-
+ void ath12k_dp_tx_release_txbuf(struct ath12k_dp *dp,
+ 				struct ath12k_tx_desc_info *tx_desc,
+ 				u8 pool_id)
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/dp_tx.h k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/dp_tx.h
+--- a/drivers/net/wireless/ath/ath12k/dp_tx.h	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/dp_tx.h	2026-09-07 17:37:28.000000000 +0200
+@@ -19,8 +19,6 @@
+ ath12k_dp_tx_get_encap_type(struct ath12k_base *ab, struct sk_buff *skb);
+ void ath12k_dp_tx_encap_nwifi(struct sk_buff *skb);
+ u8 ath12k_dp_tx_get_tid(struct sk_buff *skb);
+-u8 ath12k_dp_tx_crypto_iv_len(enum hal_encrypt_type enc_type);
+-u8 ath12k_dp_tx_crypto_icv_len(enum hal_encrypt_type enc_type);
+ void *ath12k_dp_metadata_align_skb(struct sk_buff *skb, u8 tail_len);
+ int ath12k_dp_tx_align_payload(struct ath12k_dp *dp, struct sk_buff **pskb);
+ void ath12k_dp_tx_release_txbuf(struct ath12k_dp *dp,
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/hal.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/hal.c
+--- a/drivers/net/wireless/ath/ath12k/hal.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/hal.c	2026-09-07 17:37:28.000000000 +0200
+@@ -828,8 +828,8 @@
+ {
+ 	struct hal_tlv_64_hdr *tlv64 = tlv;
+ 
+-	tlv64->tl = le64_encode_bits(tag, HAL_TLV_64_HDR_TAG) |
+-		    le64_encode_bits(len, HAL_TLV_64_HDR_LEN);
++	tlv64->tl = le64_encode_bits(tag, HAL_TLV_HDR_TAG) |
++		    le64_encode_bits(len, HAL_TLV_HDR_LEN);
+ 
+ 	return tlv64->value;
+ }
+@@ -851,7 +851,7 @@
+ 	struct hal_tlv_64_hdr *tlv64 = tlv;
+ 	u16 tag;
+ 
+-	tag = le64_get_bits(tlv64->tl, HAL_TLV_64_HDR_TAG);
++	tag = le64_get_bits(tlv64->tl, HAL_SRNG_TLV_HDR_TAG);
+ 	*desc = tlv64->value;
+ 
+ 	return tag;
+@@ -863,7 +863,7 @@
+ 	struct hal_tlv_hdr *tlv32 = tlv;
+ 	u16 tag;
+ 
+-	tag = le32_get_bits(tlv32->tl, HAL_TLV_HDR_TAG);
++	tag = le32_get_bits(tlv32->tl, HAL_SRNG_TLV_HDR_TAG);
+ 	*desc = tlv32->value;
+ 
+ 	return tag;
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/hal.h k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/hal.h
+--- a/drivers/net/wireless/ath/ath12k/hal.h	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/hal.h	2026-09-07 17:37:28.000000000 +0200
+@@ -1444,7 +1444,7 @@
+ };
+ 
+ #define HAL_TLV_HDR_TAG		GENMASK(9, 1)
+-#define HAL_TLV_HDR_LEN		GENMASK(21, 10)
++#define HAL_TLV_HDR_LEN		GENMASK(25, 10)
+ #define HAL_TLV_USR_ID		GENMASK(31, 26)
+ 
+ #define HAL_TLV_ALIGN	4
+@@ -1464,6 +1464,9 @@
+ 	u8 value[];
+ } __packed;
+ 
++#define HAL_SRNG_TLV_HDR_TAG		GENMASK(9, 1)
++#define HAL_SRNG_TLV_HDR_LEN		GENMASK(25, 10)
++
+ dma_addr_t ath12k_hal_srng_get_tp_addr(struct ath12k_base *ab,
+ 				       struct hal_srng *srng);
+ dma_addr_t ath12k_hal_srng_get_hp_addr(struct ath12k_base *ab,
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/mac.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/mac.c
+--- a/drivers/net/wireless/ath/ath12k/mac.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/mac.c	2026-09-07 17:37:28.000000000 +0200
+@@ -10169,16 +10169,16 @@
+ 	if (vif->type != NL80211_IFTYPE_STATION &&
+ 	    vif->type != NL80211_IFTYPE_AP)
+ 		vif->offload_flags &= ~(IEEE80211_OFFLOAD_ENCAP_ENABLED |
+-					IEEE80211_OFFLOAD_DECAP_ENABLED |
+-					IEEE80211_OFFLOAD_ENCAP_MCAST |
+-					IEEE80211_OFFLOAD_ENCAP_4ADDR);
++					IEEE80211_OFFLOAD_DECAP_ENABLED);
+ 
+-	if (vif->offload_flags & IEEE80211_OFFLOAD_ENCAP_ENABLED)
++	if (vif->offload_flags & IEEE80211_OFFLOAD_ENCAP_ENABLED) {
+ 		ahvif->dp_vif.tx_encap_type = ATH12K_HW_TXRX_ETHERNET;
+-	else if (test_bit(ATH12K_FLAG_RAW_MODE, &ab->dev_flags))
++		vif->offload_flags |= IEEE80211_OFFLOAD_ENCAP_4ADDR;
++	} else if (test_bit(ATH12K_FLAG_RAW_MODE, &ab->dev_flags)) {
+ 		ahvif->dp_vif.tx_encap_type = ATH12K_HW_TXRX_RAW;
+-	else
++	} else {
+ 		ahvif->dp_vif.tx_encap_type = ATH12K_HW_TXRX_NATIVE_WIFI;
++	}
+ 
+ 	ret = ath12k_wmi_vdev_set_param_cmd(ar, arvif->vdev_id,
+ 					    param_id, ahvif->dp_vif.tx_encap_type);
+@@ -10188,10 +10188,6 @@
+ 		vif->offload_flags &= ~IEEE80211_OFFLOAD_ENCAP_ENABLED;
+ 	}
+ 
+-	if (vif->offload_flags & IEEE80211_OFFLOAD_ENCAP_ENABLED)
+-		vif->offload_flags |= (IEEE80211_OFFLOAD_ENCAP_MCAST |
+-				       IEEE80211_OFFLOAD_ENCAP_4ADDR);
+-
+ 	param_id = WMI_VDEV_PARAM_RX_DECAP_TYPE;
+ 	if (vif->offload_flags & IEEE80211_OFFLOAD_DECAP_ENABLED)
+ 		param_value = ATH12K_HW_TXRX_ETHERNET;
+@@ -10620,8 +10616,22 @@
+ 
+ err_peer_del:
+ 	if (ahvif->vdev_type == WMI_VDEV_TYPE_AP) {
+-		/* ignore return value: propagate the original error */
+-		ath12k_peer_delete(ar, arvif->vdev_id, arvif->bssid);
++		reinit_completion(&ar->peer_delete_done);
++
++		ret = ath12k_wmi_send_peer_delete_cmd(ar, arvif->bssid,
++						      arvif->vdev_id);
++		if (ret) {
++			ath12k_warn(ar->ab, "failed to delete peer vdev_id %d addr %pM\n",
++				    arvif->vdev_id, arvif->bssid);
++			goto err_dp_peer_del;
++		}
++
++		ret = ath12k_wait_for_peer_delete_done(ar, arvif->vdev_id,
++						       arvif->bssid);
++		if (ret)
++			goto err_dp_peer_del;
++
++		ar->num_peers--;
+ 	}
+ 
+ err_dp_peer_del:
+@@ -11295,8 +11305,6 @@
+ 
+ 	ml_arg->assoc_link = arvif->is_sta_assoc_link;
+ 
+-	ml_arg->ieee_link_id = arvif->link_id;
+-
+ 	partner_info = ml_arg->partner_info;
+ 
+ 	links = ahvif->links_map;
+@@ -11320,7 +11328,6 @@
+ 
+ 		partner_info->vdev_id = arvif_p->vdev_id;
+ 		partner_info->hw_link_id = arvif_p->ar->pdev->hw_link_id;
+-		partner_info->ieee_link_id = arvif_p->link_id;
+ 		ether_addr_copy(partner_info->addr, link_conf->addr);
+ 		ml_arg->num_partner_links++;
+ 		partner_info++;
+@@ -13626,54 +13633,52 @@
+ int ath12k_mac_op_get_survey(struct ieee80211_hw *hw, int idx,
+ 			     struct survey_info *survey)
+ {
+-	struct ath12k_hw *ah = hw->priv;
+ 	struct ath12k *ar;
+ 	struct ieee80211_supported_band *sband;
+-	struct survey_info *ah_survey;
+-	int sband_idx = idx;
++	struct survey_info *ar_survey;
+ 
+ 	lockdep_assert_wiphy(hw->wiphy);
+ 
+-	if (sband_idx >= ATH12K_NUM_CHANS)
++	if (idx >= ATH12K_NUM_CHANS)
+ 		return -ENOENT;
+ 
+ 	sband = hw->wiphy->bands[NL80211_BAND_2GHZ];
+-	if (sband && sband_idx >= sband->n_channels) {
+-		sband_idx -= sband->n_channels;
++	if (sband && idx >= sband->n_channels) {
++		idx -= sband->n_channels;
+ 		sband = NULL;
+ 	}
+ 
+ 	if (!sband)
+ 		sband = hw->wiphy->bands[NL80211_BAND_5GHZ];
+-	if (sband && sband_idx >= sband->n_channels) {
+-		sband_idx -= sband->n_channels;
++	if (sband && idx >= sband->n_channels) {
++		idx -= sband->n_channels;
+ 		sband = NULL;
+ 	}
+ 
+ 	if (!sband)
+ 		sband = hw->wiphy->bands[NL80211_BAND_6GHZ];
+ 
+-	if (!sband || sband_idx >= sband->n_channels)
++	if (!sband || idx >= sband->n_channels)
+ 		return -ENOENT;
+ 
+-	ar = ath12k_mac_get_ar_by_chan(hw, &sband->channels[sband_idx]);
++	ar = ath12k_mac_get_ar_by_chan(hw, &sband->channels[idx]);
+ 	if (!ar) {
+-		if (sband->channels[sband_idx].flags & IEEE80211_CHAN_DISABLED) {
++		if (sband->channels[idx].flags & IEEE80211_CHAN_DISABLED) {
+ 			memset(survey, 0, sizeof(*survey));
+ 			return 0;
+ 		}
+ 		return -ENOENT;
+ 	}
+ 
+-	ah_survey = &ah->survey[idx];
++	ar_survey = &ar->survey[idx];
+ 
+-	ath12k_mac_update_bss_chan_survey(ar, &sband->channels[sband_idx]);
++	ath12k_mac_update_bss_chan_survey(ar, &sband->channels[idx]);
+ 
+-	scoped_guard(spinlock_bh, &ah->survey_lock) {
+-		memcpy(survey, ah_survey, sizeof(*survey));
+-	}
++	spin_lock_bh(&ar->data_lock);
++	memcpy(survey, ar_survey, sizeof(*survey));
++	spin_unlock_bh(&ar->data_lock);
+ 
+-	survey->channel = &sband->channels[sband_idx];
++	survey->channel = &sband->channels[idx];
+ 
+ 	if (ar->rx_channel == survey->channel)
+ 		survey->filled |= SURVEY_INFO_IN_USE;
+@@ -15101,11 +15106,11 @@
+ 	spin_lock_init(&ar->dp.ppdu_list_lock);
+ 	INIT_LIST_HEAD(&ar->arvifs);
+ 	INIT_LIST_HEAD(&ar->dp.ppdu_stats_info);
+-	INIT_LIST_HEAD(&ar->peer_delete_waits);
+ 
+ 	init_completion(&ar->vdev_setup_done);
+ 	init_completion(&ar->vdev_delete_done);
+ 	init_completion(&ar->peer_assoc_done);
++	init_completion(&ar->peer_delete_done);
+ 	init_completion(&ar->install_key_done);
+ 	init_completion(&ar->bss_survey_done);
+ 	init_completion(&ar->scan.started);
+@@ -15355,7 +15360,6 @@
+ 	mutex_init(&ah->hw_mutex);
+ 	init_completion(&ah->peer_ml_id_done);
+ 
+-	spin_lock_init(&ah->survey_lock);
+ 	spin_lock_init(&ah->dp_hw.peer_lock);
+ 	INIT_LIST_HEAD(&ah->dp_hw.dp_peers_list);
+ 
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/peer.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/peer.c
+--- a/drivers/net/wireless/ath/ath12k/peer.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/peer.c	2026-09-07 17:37:28.000000000 +0200
+@@ -9,55 +9,6 @@
+ #include "debug.h"
+ #include "debugfs.h"
+ 
+-static void ath12k_peer_delete_wait_register(struct ath12k *ar,
+-					     struct ath12k_peer_delete_wait *wait,
+-					     u32 vdev_id, const u8 *addr)
+-{
+-	wait->vdev_id = vdev_id;
+-	ether_addr_copy(wait->addr, addr);
+-	init_completion(&wait->done);
+-
+-	spin_lock_bh(&ar->data_lock);
+-	list_add(&wait->list, &ar->peer_delete_waits);
+-	spin_unlock_bh(&ar->data_lock);
+-}
+-
+-static void ath12k_peer_delete_wait_unregister(struct ath12k *ar,
+-					       struct ath12k_peer_delete_wait *wait)
+-{
+-	spin_lock_bh(&ar->data_lock);
+-	list_del(&wait->list);
+-	spin_unlock_bh(&ar->data_lock);
+-}
+-
+-void ath12k_peer_delete_resp_signal(struct ath12k *ar, u32 vdev_id, const u8 *addr)
+-{
+-	struct ath12k_peer_delete_wait *wait;
+-
+-	guard(spinlock_bh)(&ar->data_lock);
+-
+-	list_for_each_entry(wait, &ar->peer_delete_waits, list) {
+-		if (wait->vdev_id == vdev_id &&
+-		    ether_addr_equal(wait->addr, addr)) {
+-			complete(&wait->done);
+-			return;
+-		}
+-	}
+-
+-	ath12k_warn(ar->ab, "failed to find link peer with vdev id %u addr %pM\n",
+-		    vdev_id, addr);
+-}
+-
+-void ath12k_peer_delete_wait_flush(struct ath12k *ar)
+-{
+-	struct ath12k_peer_delete_wait *wait;
+-
+-	spin_lock_bh(&ar->data_lock);
+-	list_for_each_entry(wait, &ar->peer_delete_waits, list)
+-		complete(&wait->done);
+-	spin_unlock_bh(&ar->data_lock);
+-}
+-
+ static int ath12k_wait_for_dp_link_peer_common(struct ath12k_base *ab, int vdev_id,
+ 					       const u8 *addr, bool expect_mapped)
+ {
+@@ -111,19 +62,20 @@
+ 	return ath12k_wait_for_dp_link_peer_common(ar->ab, vdev_id, addr, false);
+ }
+ 
+-int ath12k_wait_for_peer_delete_done(struct ath12k *ar,
+-				     struct ath12k_peer_delete_wait *wait)
++int ath12k_wait_for_peer_delete_done(struct ath12k *ar, u32 vdev_id,
++				     const u8 *addr)
+ {
+-	unsigned long time_left;
+ 	int ret;
++	unsigned long time_left;
+ 
+-	ret = ath12k_wait_for_peer_deleted(ar, wait->vdev_id, wait->addr);
++	ret = ath12k_wait_for_peer_deleted(ar, vdev_id, addr);
+ 	if (ret) {
+-		ath12k_warn(ar->ab, "failed wait for peer deleted\n");
++		ath12k_warn(ar->ab, "failed wait for peer deleted");
+ 		return ret;
+ 	}
+ 
+-	time_left = wait_for_completion_timeout(&wait->done, 3 * HZ);
++	time_left = wait_for_completion_timeout(&ar->peer_delete_done,
++						3 * HZ);
+ 	if (time_left == 0) {
+ 		ath12k_warn(ar->ab, "Timeout in receiving peer delete response\n");
+ 		return -ETIMEDOUT;
+@@ -139,6 +91,8 @@
+ 
+ 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
+ 
++	reinit_completion(&ar->peer_delete_done);
++
+ 	ret = ath12k_wmi_send_peer_delete_cmd(ar, addr, vdev_id);
+ 	if (ret) {
+ 		ath12k_warn(ab,
+@@ -152,7 +106,6 @@
+ 
+ int ath12k_peer_delete(struct ath12k *ar, u32 vdev_id, u8 *addr)
+ {
+-	struct ath12k_peer_delete_wait wait;
+ 	int ret;
+ 
+ 	lockdep_assert_wiphy(ath12k_ar_to_hw(ar)->wiphy);
+@@ -161,25 +114,17 @@
+ 				     &(ath12k_ar_to_ah(ar)->dp_hw), vdev_id,
+ 				     addr, ar->hw_link_id);
+ 
+-	/*
+-	 * Register the stack waiter before sending so the resp_event for
+-	 * this peer cannot arrive while no waiter is queued.
+-	 */
+-	ath12k_peer_delete_wait_register(ar, &wait, vdev_id, addr);
+-
+ 	ret = ath12k_peer_delete_send(ar, vdev_id, addr);
+ 	if (ret)
+-		goto out;
++		return ret;
+ 
+-	ret = ath12k_wait_for_peer_delete_done(ar, &wait);
++	ret = ath12k_wait_for_peer_delete_done(ar, vdev_id, addr);
+ 	if (ret)
+-		goto out;
++		return ret;
+ 
+ 	ar->num_peers--;
+ 
+-out:
+-	ath12k_peer_delete_wait_unregister(ar, &wait);
+-	return ret;
++	return 0;
+ }
+ 
+ static int ath12k_wait_for_peer_created(struct ath12k *ar, int vdev_id, const u8 *addr)
+@@ -239,26 +184,22 @@
+ 	peer = ath12k_dp_link_peer_find_by_vdev_and_addr(dp, arg->vdev_id,
+ 							 arg->peer_addr);
+ 	if (!peer) {
+-		struct ath12k_peer_delete_wait wait;
+-
+ 		spin_unlock_bh(&dp->dp_lock);
+ 		ath12k_warn(ar->ab, "failed to find peer %pM on vdev %i after creation\n",
+ 			    arg->peer_addr, arg->vdev_id);
+ 
+-		ath12k_peer_delete_wait_register(ar, &wait, arg->vdev_id,
+-						 arg->peer_addr);
++		reinit_completion(&ar->peer_delete_done);
+ 
+ 		ret = ath12k_wmi_send_peer_delete_cmd(ar, arg->peer_addr,
+ 						      arg->vdev_id);
+ 		if (ret) {
+ 			ath12k_warn(ar->ab, "failed to delete peer vdev_id %d addr %pM\n",
+ 				    arg->vdev_id, arg->peer_addr);
+-			ath12k_peer_delete_wait_unregister(ar, &wait);
+ 			return ret;
+ 		}
+ 
+-		ret = ath12k_wait_for_peer_delete_done(ar, &wait);
+-		ath12k_peer_delete_wait_unregister(ar, &wait);
++		ret = ath12k_wait_for_peer_delete_done(ar, arg->vdev_id,
++						       arg->peer_addr);
+ 		if (ret)
+ 			return ret;
+ 
+@@ -367,14 +308,13 @@
+ 
+ int ath12k_peer_mlo_link_peers_delete(struct ath12k_vif *ahvif, struct ath12k_sta *ahsta)
+ {
+-	DECLARE_BITMAP(registered, IEEE80211_MLD_MAX_NUM_LINKS);
+ 	struct ieee80211_sta *sta = ath12k_ahsta_to_sta(ahsta);
+ 	struct ath12k_hw *ah = ahvif->ah;
+ 	struct ath12k_link_vif *arvif;
+ 	struct ath12k_link_sta *arsta;
+-	int ret, err_ret = 0;
+ 	unsigned long links;
+ 	struct ath12k *ar;
++	int ret, err_ret = 0;
+ 	u8 link_id;
+ 
+ 	lockdep_assert_wiphy(ah->hw->wiphy);
+@@ -382,19 +322,8 @@
+ 	if (!sta->mlo)
+ 		return -EINVAL;
+ 
+-	struct ath12k_peer_delete_wait *waits __free(kfree) =
+-				kzalloc_objs(*waits, IEEE80211_MLD_MAX_NUM_LINKS);
+-	if (!waits)
+-		return -ENOMEM;
+-
+-	bitmap_zero(registered, IEEE80211_MLD_MAX_NUM_LINKS);
+-
+-	/*
+-	 * Firmware expects delete of all link peers at once before waiting
+-	 * for reception of peer unmap or delete responses. Phase 1 registers
+-	 * a per-link stack waiter and sends WMI peer delete for every
+-	 * link; the resp_event handler matches each response to its
+-	 * (vdev_id, addr) waiter on ar->peer_delete_waits.
++	/* FW expects delete of all link peers at once before waiting for reception
++	 * of peer unmap or delete responses
+ 	 */
+ 	links = ahsta->links_map;
+ 	for_each_set_bit(link_id, &links, IEEE80211_MLD_MAX_NUM_LINKS) {
+@@ -414,36 +343,29 @@
+ 					     arvif->vdev_id, arsta->addr,
+ 					     ar->hw_link_id);
+ 
+-		ath12k_peer_delete_wait_register(ar, &waits[link_id],
+-						 arvif->vdev_id, arsta->addr);
+-
+ 		ret = ath12k_peer_delete_send(ar, arvif->vdev_id, arsta->addr);
+ 		if (ret) {
+ 			ath12k_warn(ar->ab,
+ 				    "failed to delete peer vdev_id %d addr %pM ret %d\n",
+ 				    arvif->vdev_id, arsta->addr, ret);
+ 			err_ret = ret;
+-			ath12k_peer_delete_wait_unregister(ar, &waits[link_id]);
+ 			continue;
+ 		}
+-
+-		set_bit(link_id, registered);
+ 	}
+ 
+-	/*
+-	 * Phase 2: wait for unmap + delete_resp on each registered link
+-	 * and tear down the waiter.
+-	 */
++	/* Ensure all link peers are deleted and unmapped */
+ 	links = ahsta->links_map;
+ 	for_each_set_bit(link_id, &links, IEEE80211_MLD_MAX_NUM_LINKS) {
+-		if (!test_bit(link_id, registered))
++		arvif = wiphy_dereference(ah->hw->wiphy, ahvif->link[link_id]);
++		arsta = wiphy_dereference(ah->hw->wiphy, ahsta->link[link_id]);
++		if (!arvif || !arsta)
+ 			continue;
+ 
+-		arvif = wiphy_dereference(ah->hw->wiphy, ahvif->link[link_id]);
+ 		ar = arvif->ar;
++		if (!ar)
++			continue;
+ 
+-		ret = ath12k_wait_for_peer_delete_done(ar, &waits[link_id]);
+-		ath12k_peer_delete_wait_unregister(ar, &waits[link_id]);
++		ret = ath12k_wait_for_peer_delete_done(ar, arvif->vdev_id, arsta->addr);
+ 		if (ret) {
+ 			err_ret = ret;
+ 			continue;
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/peer.h k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/peer.h
+--- a/drivers/net/wireless/ath/ath12k/peer.h	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/peer.h	2026-09-07 17:37:28.000000000 +0200
+@@ -9,23 +9,13 @@
+ 
+ #include "dp_peer.h"
+ 
+-struct ath12k_peer_delete_wait {
+-	struct list_head list;
+-	u32 vdev_id;
+-	u8 addr[ETH_ALEN];
+-	struct completion done;
+-};
+-
+-void ath12k_peer_delete_resp_signal(struct ath12k *ar, u32 vdev_id, const u8 *addr);
+-void ath12k_peer_delete_wait_flush(struct ath12k *ar);
+-
+ void ath12k_peer_cleanup(struct ath12k *ar, u32 vdev_id);
+ int ath12k_peer_delete(struct ath12k *ar, u32 vdev_id, u8 *addr);
+ int ath12k_peer_create(struct ath12k *ar, struct ath12k_link_vif *arvif,
+ 		       struct ieee80211_sta *sta,
+ 		       struct ath12k_wmi_peer_create_arg *arg);
+-int ath12k_wait_for_peer_delete_done(struct ath12k *ar,
+-				     struct ath12k_peer_delete_wait *wait);
++int ath12k_wait_for_peer_delete_done(struct ath12k *ar, u32 vdev_id,
++				     const u8 *addr);
+ int ath12k_peer_mlo_link_peers_delete(struct ath12k_vif *ahvif, struct ath12k_sta *ahsta);
+ struct ath12k_ml_peer *ath12k_peer_ml_find(struct ath12k_hw *ah,
+ 					   const u8 *addr);
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/qmi.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/qmi.c
+--- a/drivers/net/wireless/ath/ath12k/qmi.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/qmi.c	2026-09-07 17:37:28.000000000 +0200
+@@ -13,7 +13,6 @@
+ #include <linux/firmware.h>
+ #include <linux/of_address.h>
+ #include <linux/ioport.h>
+-#include <linux/of_reserved_mem.h>
+ 
+ #define SLEEP_CLOCK_SELECT_INTERNAL_BIT	0x02
+ #define HOST_CSTATE_BIT			0x04
+@@ -2726,96 +2725,121 @@
+ 	return ret;
+ }
+ 
+-static const char *ath12k_qmi_get_mem_reg_name(int mem_type)
+-{
+-	switch (mem_type) {
+-	case HOST_DDR_REGION_TYPE:
+-	case BDF_MEM_REGION_TYPE:
+-		return "q6-region";
+-	case M3_DUMP_REGION_TYPE:
+-		return "m3-dump";
+-	case CALDB_MEM_REGION_TYPE:
+-		return "q6-caldb";
+-	case MLO_GLOBAL_MEM_REGION_TYPE:
+-		return "mlo-global-mem";
+-	default:
+-		return NULL;
+-	}
+-}
+-
+ static int ath12k_qmi_assign_target_mem_chunk(struct ath12k_base *ab)
+ {
+-	struct device_node *np = ab->dev->of_node;
+-	size_t avail_rmem_size, offset = 0;
+-	struct target_mem_chunk *chunk;
+-	struct resource res;
+-	const char *rname;
++	struct reserved_mem *rmem;
++	size_t avail_rmem_size;
+ 	int i, idx, ret;
+ 
+ 	for (i = 0, idx = 0; i < ab->qmi.mem_seg_count; i++) {
+-		chunk = &ab->qmi.target_mem[i];
+-		if (chunk->type == CALDB_MEM_REGION_TYPE) {
+-			/*
+-			 * Cold boot calibration is not enabled in Ath12k. Hence,
++		switch (ab->qmi.target_mem[i].type) {
++		case HOST_DDR_REGION_TYPE:
++			rmem = ath12k_core_get_reserved_mem(ab, 0);
++			if (!rmem) {
++				ret = -ENODEV;
++				goto out;
++			}
++
++			avail_rmem_size = rmem->size;
++			if (avail_rmem_size < ab->qmi.target_mem[i].size) {
++				ath12k_dbg(ab, ATH12K_DBG_QMI,
++					   "failed to assign mem type %u req size %u avail size %zu\n",
++					   ab->qmi.target_mem[i].type,
++					   ab->qmi.target_mem[i].size,
++					   avail_rmem_size);
++				ret = -EINVAL;
++				goto out;
++			}
++
++			ab->qmi.target_mem[idx].paddr = rmem->base;
++			ab->qmi.target_mem[idx].v.ioaddr =
++				ioremap(ab->qmi.target_mem[idx].paddr,
++					ab->qmi.target_mem[i].size);
++			if (!ab->qmi.target_mem[idx].v.ioaddr) {
++				ret = -EIO;
++				goto out;
++			}
++			ab->qmi.target_mem[idx].size = ab->qmi.target_mem[i].size;
++			ab->qmi.target_mem[idx].type = ab->qmi.target_mem[i].type;
++			idx++;
++			break;
++		case BDF_MEM_REGION_TYPE:
++			rmem = ath12k_core_get_reserved_mem(ab, 0);
++			if (!rmem) {
++				ret = -ENODEV;
++				goto out;
++			}
++
++			avail_rmem_size = rmem->size - ab->hw_params->bdf_addr_offset;
++			if (avail_rmem_size < ab->qmi.target_mem[i].size) {
++				ath12k_dbg(ab, ATH12K_DBG_QMI,
++					   "failed to assign mem type %u req size %u avail size %zu\n",
++					   ab->qmi.target_mem[i].type,
++					   ab->qmi.target_mem[i].size,
++					   avail_rmem_size);
++				ret = -EINVAL;
++				goto out;
++			}
++			ab->qmi.target_mem[idx].paddr =
++				rmem->base + ab->hw_params->bdf_addr_offset;
++			ab->qmi.target_mem[idx].v.ioaddr =
++				ioremap(ab->qmi.target_mem[idx].paddr,
++					ab->qmi.target_mem[i].size);
++			if (!ab->qmi.target_mem[idx].v.ioaddr) {
++				ret = -EIO;
++				goto out;
++			}
++			ab->qmi.target_mem[idx].size = ab->qmi.target_mem[i].size;
++			ab->qmi.target_mem[idx].type = ab->qmi.target_mem[i].type;
++			idx++;
++			break;
++		case CALDB_MEM_REGION_TYPE:
++			/* Cold boot calibration is not enabled in Ath12k. Hence,
+ 			 * assign paddr = 0.
+ 			 * Once cold boot calibration is enabled add support to
+ 			 * assign reserved memory from DT.
+ 			 */
+ 			ab->qmi.target_mem[idx].paddr = 0;
+ 			ab->qmi.target_mem[idx].v.ioaddr = NULL;
+-			ab->qmi.target_mem[idx].size = chunk->size;
+-			ab->qmi.target_mem[idx].type = chunk->type;
++			ab->qmi.target_mem[idx].size = ab->qmi.target_mem[i].size;
++			ab->qmi.target_mem[idx].type = ab->qmi.target_mem[i].type;
+ 			idx++;
+-			continue;
+-		}
+-
+-		rname = ath12k_qmi_get_mem_reg_name(chunk->type);
+-		if (!rname) {
+-			ath12k_warn(ab, "qmi ignore invalid mem req type %u\n",
+-				    chunk->type);
+-			continue;
+-		}
+-
+-		ret = of_reserved_mem_region_to_resource_byname(np, rname, &res);
+-		if (ret)
+-			goto out;
++			break;
++		case M3_DUMP_REGION_TYPE:
++			rmem = ath12k_core_get_reserved_mem(ab, 1);
++			if (!rmem) {
++				ret = -EINVAL;
++				goto out;
++			}
+ 
+-		avail_rmem_size = resource_size(&res);
+-		if (chunk->type == BDF_MEM_REGION_TYPE ||
+-		    chunk->type == HOST_DDR_REGION_TYPE) {
+-			if (ab->hw_params->bdf_addr_offset > avail_rmem_size ||
+-			    offset > avail_rmem_size - ab->hw_params->bdf_addr_offset) {
+-				ath12k_err(ab, "qmi mem offset overflow: bdf_offset=%u offset=%zu size=%zu\n",
+-					   ab->hw_params->bdf_addr_offset, offset,
++			avail_rmem_size = rmem->size;
++			if (avail_rmem_size < ab->qmi.target_mem[i].size) {
++				ath12k_dbg(ab, ATH12K_DBG_QMI,
++					   "failed to assign mem type %u req size %u avail size %zu\n",
++					   ab->qmi.target_mem[i].type,
++					   ab->qmi.target_mem[i].size,
+ 					   avail_rmem_size);
+ 				ret = -EINVAL;
+ 				goto out;
+ 			}
+ 
+-			avail_rmem_size -= ab->hw_params->bdf_addr_offset + offset;
+-			res.start += ab->hw_params->bdf_addr_offset + offset;
+-			offset += chunk->size;
+-		}
+-
+-		if (avail_rmem_size < chunk->size) {
+-			ath12k_dbg(ab, ATH12K_DBG_QMI,
+-				   "failed to assign mem type %u req size %u avail size %zu\n",
+-				   chunk->type, chunk->size, avail_rmem_size);
+-			ret = -EINVAL;
+-			goto out;
+-		}
+-
+-		ab->qmi.target_mem[idx].paddr = res.start;
+-		ab->qmi.target_mem[idx].v.ioaddr = ioremap(ab->qmi.target_mem[idx].paddr,
+-							   chunk->size);
+-		if (!ab->qmi.target_mem[idx].v.ioaddr) {
+-			ret = -EIO;
+-			goto out;
++			ab->qmi.target_mem[idx].paddr = rmem->base;
++			ab->qmi.target_mem[idx].v.ioaddr =
++				ioremap(ab->qmi.target_mem[idx].paddr,
++					ab->qmi.target_mem[i].size);
++			if (!ab->qmi.target_mem[idx].v.ioaddr) {
++				ret = -EIO;
++				goto out;
++			}
++			ab->qmi.target_mem[idx].size = ab->qmi.target_mem[i].size;
++			ab->qmi.target_mem[idx].type = ab->qmi.target_mem[i].type;
++			idx++;
++			break;
++		default:
++			ath12k_warn(ab, "qmi ignore invalid mem req type %u\n",
++				    ab->qmi.target_mem[i].type);
++			break;
+ 		}
+-
+-		ab->qmi.target_mem[idx].size = chunk->size;
+-		ab->qmi.target_mem[idx].type = chunk->type;
+-		idx++;
+ 	}
+ 	ab->qmi.mem_seg_count = idx;
+ 
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/wifi7/dp_tx.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/wifi7/dp_tx.c
+--- a/drivers/net/wireless/ath/ath12k/wifi7/dp_tx.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/wifi7/dp_tx.c	2026-09-07 17:37:28.000000000 +0200
+@@ -13,49 +13,6 @@
+ #include "hal.h"
+ #include "hal_tx.h"
+ 
+-/*
+- * Convert an encrypted EAPOL frame from native-WiFi format to
+- * the layout expected by the firmware RAW encrypt pipeline:
+- *
+- *   [802.11 hdr][IV (zeroed)][LLC/SNAP][EAPOL payload][ICV (zeroed)]
+- *
+- * mac80211 delivers the frame as [802.11 hdr][LLC/SNAP][EAPOL payload].
+- * The MAC header length is read from the unmodified skb and is safe because
+- * ieee80211_hdrlen() only inspects the 2-byte frame_control field.
+- * pskb_expand_head() is used to grow both head (for the IV) and tail
+- * (for the ICV) in a single call and allocation.
+- */
+-static int
+-ath12k_wifi7_dp_tx_encap_eapol(struct sk_buff *skb,
+-			       struct hal_tx_info *ti,
+-			       struct ath12k_skb_cb *skb_cb)
+-{
+-	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
+-	enum hal_encrypt_type enc_type =
+-				ath12k_dp_tx_get_encrypt_type(skb_cb->cipher);
+-	u16 mac_hdr_len = ieee80211_hdrlen(hdr->frame_control);
+-	u8 iv_len = ath12k_dp_tx_crypto_iv_len(enc_type);
+-	u8 icv_len = ath12k_dp_tx_crypto_icv_len(enc_type);
+-
+-	if (pskb_expand_head(skb, iv_len, icv_len, GFP_ATOMIC))
+-		return -ENOMEM;
+-
+-	if (iv_len) {
+-		skb_push(skb, iv_len);
+-		memmove(skb->data, skb->data + iv_len, mac_hdr_len);
+-		memset(skb->data + mac_hdr_len, 0, iv_len);
+-	}
+-
+-	if (icv_len)
+-		memset(skb_put(skb, icv_len), 0, icv_len);
+-
+-	ti->flags0 |= u32_encode_bits(1, HAL_TCL_DATA_CMD_INFO2_TO_FW);
+-	ti->encap_type = HAL_TCL_ENCAP_TYPE_RAW;
+-	ti->encrypt_type = enc_type;
+-
+-	return 0;
+-}
+-
+ static void
+ ath12k_wifi7_hal_tx_cmd_ext_desc_setup(struct ath12k_base *ab,
+ 				       struct hal_tx_msdu_ext_desc *tcl_ext_cmd,
+@@ -134,7 +91,6 @@
+ 	u32 iova_mask = dp->hw_params->iova_mask;
+ 	bool is_diff_encap = false;
+ 	bool is_null_frame = false;
+-	bool eapol_encap_done = false;
+ 
+ 	if (test_bit(ATH12K_FLAG_CRASH_FLUSH, &ab->dev_flags))
+ 		return -ESHUTDOWN;
+@@ -255,27 +211,9 @@
+ 	case HAL_TCL_ENCAP_TYPE_NATIVE_WIFI:
+ 		is_null_frame = ieee80211_is_nullfunc(hdr->frame_control);
+ 		if (ahvif->vif->offload_flags & IEEE80211_OFFLOAD_ENCAP_ENABLED) {
+-			if ((skb->protocol == cpu_to_be16(ETH_P_PAE) &&
+-			     !(skb_cb->flags & ATH12K_SKB_CIPHER_SET)) || is_null_frame)
++			if (skb->protocol == cpu_to_be16(ETH_P_PAE) || is_null_frame)
+ 				is_diff_encap = true;
+ 
+-			if (skb->protocol == cpu_to_be16(ETH_P_PAE) &&
+-			    (skb_cb->flags & ATH12K_SKB_CIPHER_SET)) {
+-				if (!eapol_encap_done) {
+-					ret = ath12k_wifi7_dp_tx_encap_eapol(skb, &ti,
+-									     skb_cb);
+-					if (ret)
+-						goto fail_remove_tx_buf;
+-					hdr = (void *)skb->data;
+-					eapol_encap_done = true;
+-				} else {
+-					ti.flags0 |= u32_encode_bits(1,
+-							HAL_TCL_DATA_CMD_INFO2_TO_FW);
+-					ti.encap_type = HAL_TCL_ENCAP_TYPE_RAW;
+-					ti.encrypt_type =
+-						ath12k_dp_tx_get_encrypt_type(skb_cb->cipher);
+-				}
+-			}
+ 			/* Firmware expects msdu ext descriptor for nwifi/raw packets
+ 			 * received in ETH mode. Without this, observed tx fail for
+ 			 * Multicast packets in ETH mode.
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/wifi7/hal_rx_desc.h k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/wifi7/hal_rx_desc.h
+--- a/drivers/net/wireless/ath/ath12k/wifi7/hal_rx_desc.h	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/wifi7/hal_rx_desc.h	2026-09-07 17:37:28.000000000 +0200
+@@ -140,38 +140,6 @@
+ 	__le32 res1;
+ } __packed;
+ 
+-struct rx_mpdu_start_qcc2072 {
+-	__le32 info0;
+-	__le32 info2;
+-	__le32 reo_queue_desc_lo;
+-	__le32 info1;
+-	__le32 pn[4];
+-	__le32 info4;
+-	__le32 peer_meta_data;
+-	__le16 ast_index;
+-	__le16 sw_peer_id;
+-	__le16 info3;
+-	__le16 phy_ppdu_id;
+-	__le32 info5;
+-	__le32 info6;
+-	__le16 frame_ctrl;
+-	__le16 duration;
+-	u8 addr1[ETH_ALEN];
+-	u8 addr2[ETH_ALEN];
+-	u8 addr3[ETH_ALEN];
+-	__le16 seq_ctrl;
+-	u8 addr4[ETH_ALEN];
+-	__le16 qos_ctrl;
+-	__le32 ht_ctrl;
+-	__le32 info7;
+-	__le32 res0;
+-	__le32 res1;
+-	__le32 res2;
+-	__le32 info8;
+-	__le32 res3;
+-	__le32 res4;
+-} __packed;
+-
+ #define QCN9274_MPDU_START_SELECT_MPDU_START_TAG			BIT(0)
+ #define QCN9274_MPDU_START_SELECT_INFO0_REO_QUEUE_DESC_LO		BIT(1)
+ #define QCN9274_MPDU_START_SELECT_INFO1_PN_31_0				BIT(2)
+@@ -1524,7 +1492,7 @@
+ 	struct rx_msdu_end_qcn9274 msdu_end;
+ 	u8 rx_padding0[RX_BE_PADDING0_BYTES];
+ 	__le32 mpdu_start_tag;
+-	struct rx_mpdu_start_qcc2072 mpdu_start;
++	struct rx_mpdu_start_qcn9274 mpdu_start;
+ 	struct rx_pkt_hdr_tlv_qcc2072 pkt_hdr_tlv;
+ 	u8 msdu_payload[];
+ };
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/wifi7/hw.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/wifi7/hw.c
+--- a/drivers/net/wireless/ath/ath12k/wifi7/hw.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/wifi7/hw.c	2026-09-07 17:37:28.000000000 +0200
+@@ -918,7 +918,6 @@
+ 	struct ethhdr *eth;
+ 	bool is_prb_rsp;
+ 	u16 mcbc_gsn;
+-	u8 cb_flags;
+ 	u8 link_id;
+ 	int ret;
+ 	struct ath12k_dp *tmp_dp;
+@@ -1012,13 +1011,8 @@
+ 	    ieee80211_has_protected(hdr->frame_control))
+ 		is_dvlan = true;
+ 
+-	/*
+-	 * Add a sta pointer check to differentiate multicast encapsulation
+-	 * offload packets, as the ATH12K_SKB_HW_80211_ENCAP flag is also set
+-	 * for such packets.
+-	 */
+ 	if (!vif->valid_links || !is_mcast || is_dvlan ||
+-	    ((skb_cb->flags & ATH12K_SKB_HW_80211_ENCAP) && sta) ||
++	    (skb_cb->flags & ATH12K_SKB_HW_80211_ENCAP) ||
+ 	    test_bit(ATH12K_FLAG_RAW_MODE, &ar->ab->dev_flags)) {
+ 		ret = ath12k_wifi7_dp_tx(dp_pdev, arvif, arsta, skb, false, 0, is_mcast);
+ 		if (unlikely(ret)) {
+@@ -1030,7 +1024,6 @@
+ 		mcbc_gsn = atomic_inc_return(&ahvif->dp_vif.mcbc_gsn) & 0xfff;
+ 
+ 		links_map = ahvif->links_map;
+-		cb_flags = skb_cb->flags;
+ 		for_each_set_bit(link_id, &links_map,
+ 				 IEEE80211_MLD_MAX_NUM_LINKS) {
+ 			tmp_arvif = rcu_dereference(ahvif->link[link_id]);
+@@ -1038,46 +1031,22 @@
+ 				continue;
+ 
+ 			tmp_ar = tmp_arvif->ar;
+-			tmp_dp = ath12k_ab_to_dp(tmp_ar->ab);
+-			tmp_dp_pdev = ath12k_dp_to_pdev_dp(tmp_dp,
++			tmp_dp_pdev = ath12k_dp_to_pdev_dp(tmp_ar->ab->dp,
+ 							   tmp_ar->pdev_idx);
+ 			if (!tmp_dp_pdev)
+ 				continue;
+-
+-			if (cb_flags & ATH12K_SKB_HW_80211_ENCAP) {
+-				/*
+-				 * skb->data may be modified for the iova_mask devices.
+-				 * It is better to use skb_copy() for such devices
+-				 * to avoid any potential skb corruption related issues.
+-				 */
+-				if (tmp_dp->hw_params->iova_mask)
+-					msdu_copied = skb_copy(skb, GFP_ATOMIC);
+-				else
+-					/*
+-					 * ath12k_wifi7_dp_tx() should treat cloned HW-encap
+-					 * Ethernet multicast frames as read-only.
+-					 */
+-					msdu_copied = skb_clone(skb, GFP_ATOMIC);
+-				if (!msdu_copied) {
+-					ath12k_err(ar->ab,
+-						   "skb copy/clone failure link_id 0x%X vdevid 0x%X\n",
+-						   link_id, tmp_arvif->vdev_id);
+-					continue;
+-				}
+-			} else {
+-				msdu_copied = skb_copy(skb, GFP_ATOMIC);
+-				if (!msdu_copied) {
+-					ath12k_err(ar->ab,
+-						   "skb copy failure link_id 0x%X vdevid 0x%X\n",
+-						   link_id, tmp_arvif->vdev_id);
+-					continue;
+-				}
+-
+-				ath12k_mlo_mcast_update_tx_link_address(vif, link_id,
+-									msdu_copied,
+-									info_flags);
++			msdu_copied = skb_copy(skb, GFP_ATOMIC);
++			if (!msdu_copied) {
++				ath12k_err(ar->ab,
++					   "skb copy failure link_id 0x%X vdevid 0x%X\n",
++					   link_id, tmp_arvif->vdev_id);
++				continue;
+ 			}
+ 
++			ath12k_mlo_mcast_update_tx_link_address(vif, link_id,
++								msdu_copied,
++								info_flags);
++
+ 			skb_cb = ATH12K_SKB_CB(msdu_copied);
+ 			skb_cb->link_id = link_id;
+ 			skb_cb->vif = vif;
+@@ -1092,6 +1061,7 @@
+ 			if (unlikely(!ahvif->dp_vif.key_cipher))
+ 				goto skip_peer_find;
+ 
++			tmp_dp = ath12k_ab_to_dp(tmp_ar->ab);
+ 			spin_lock_bh(&tmp_dp->dp_lock);
+ 			peer = ath12k_dp_link_peer_find_by_addr(tmp_dp,
+ 								tmp_arvif->bssid);
+@@ -1110,16 +1080,11 @@
+ 				skb_cb->cipher = key->cipher;
+ 				skb_cb->flags |= ATH12K_SKB_CIPHER_SET;
+ 
+-				if (skb_cb->flags & ATH12K_SKB_HW_80211_ENCAP)
+-					goto skip_fctl_protected_check;
+-
+ 				hdr = (struct ieee80211_hdr *)msdu_copied->data;
+ 				if (!ieee80211_has_protected(hdr->frame_control))
+ 					hdr->frame_control |=
+ 						cpu_to_le16(IEEE80211_FCTL_PROTECTED);
+ 			}
+-
+-skip_fctl_protected_check:
+ 			spin_unlock_bh(&tmp_dp->dp_lock);
+ 
+ skip_peer_find:
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/wmi.c k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/wmi.c
+--- a/drivers/net/wireless/ath/ath12k/wmi.c	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/wmi.c	2026-09-07 17:37:28.000000000 +0200
+@@ -207,8 +207,6 @@
+ 		.min_len = sizeof(struct wmi_per_chain_rssi_stat_params) },
+ 	[WMI_TAG_OBSS_COLOR_COLLISION_EVT] = {
+ 		.min_len = sizeof(struct wmi_obss_color_collision_event) },
+-	[WMI_TAG_PDEV_CSA_SWITCH_COUNT_STATUS_EVENT] = {
+-		.min_len = sizeof(struct ath12k_wmi_pdev_csa_event) },
+ };
+ 
+ __le32 ath12k_wmi_tlv_hdr(u32 cmd, u32 len)
+@@ -376,13 +374,6 @@
+ 	return tb;
+ }
+ 
+-static u32 ath12k_wmi_tlv_data_len(const void *data)
+-{
+-	const struct wmi_tlv *tlv = (const struct wmi_tlv *)data - 1;
+-
+-	return le32_get_bits(tlv->header, WMI_TLV_LEN);
+-}
+-
+ static int ath12k_wmi_cmd_send_nowait(struct ath12k_wmi_pdev *wmi, struct sk_buff *skb,
+ 				      u32 cmd_id)
+ {
+@@ -1237,16 +1228,10 @@
+ 				   le32_encode_bits(arg->ml.mcast_link,
+ 						    ATH12K_WMI_FLAG_MLO_MCAST_VDEV) |
+ 				   le32_encode_bits(arg->ml.link_add,
+-						    ATH12K_WMI_FLAG_MLO_LINK_ADD) |
+-				   le32_encode_bits(arg->ml.assoc_link,
+-						    ATH12K_WMI_FLAG_MLO_START_AS_ACTIVE) |
+-				   cpu_to_le32(ATH12K_WMI_FLAG_MLO_IEEE_LINK_IDX_VALID);
++						    ATH12K_WMI_FLAG_MLO_LINK_ADD);
+ 
+-		ml_params->ieee_link_id = cpu_to_le32(arg->ml.ieee_link_id);
+-
+-		ath12k_dbg(ar->ab, ATH12K_DBG_WMI, "vdev %u start link_id %u ml flags 0x%x\n",
+-			   arg->vdev_id, arg->ml.ieee_link_id,
+-			   le32_to_cpu(ml_params->flags));
++		ath12k_dbg(ar->ab, ATH12K_DBG_WMI, "vdev %d start ml flags 0x%x\n",
++			   arg->vdev_id, ml_params->flags);
+ 
+ 		ptr += sizeof(*ml_params);
+ 
+@@ -1259,23 +1244,19 @@
+ 		partner_info = ptr;
+ 
+ 		for (i = 0; i < arg->ml.num_partner_links; i++) {
+-			struct wmi_ml_partner_info *pinfo = &arg->ml.partner_info[i];
+-
+ 			partner_info->tlv_header =
+ 				ath12k_wmi_tlv_cmd_hdr(WMI_TAG_MLO_PARTNER_LINK_PARAMS,
+ 						       sizeof(*partner_info));
+-			partner_info->vdev_id = cpu_to_le32(pinfo->vdev_id);
+-			partner_info->hw_link_id = cpu_to_le32(pinfo->hw_link_id);
++			partner_info->vdev_id =
++				cpu_to_le32(arg->ml.partner_info[i].vdev_id);
++			partner_info->hw_link_id =
++				cpu_to_le32(arg->ml.partner_info[i].hw_link_id);
+ 			ether_addr_copy(partner_info->vdev_addr.addr,
+-					pinfo->addr);
+-			partner_info->flags =
+-				cpu_to_le32(ATH12K_WMI_FLAG_MLO_IEEE_LINK_IDX_VALID_PARTNER);
+-			partner_info->ieee_link_id = cpu_to_le32(pinfo->ieee_link_id);
+-
+-			ath12k_dbg(ar->ab, ATH12K_DBG_WMI, "partner vdev %u hw_link_id %u macaddr %pM link_id %u ml flags 0x%x\n",
+-				   pinfo->vdev_id, pinfo->hw_link_id,
+-				   pinfo->addr, pinfo->ieee_link_id,
+-				   le32_to_cpu(partner_info->flags));
++					arg->ml.partner_info[i].addr);
++
++			ath12k_dbg(ar->ab, ATH12K_DBG_WMI, "partner vdev %d hw_link_id %d macaddr%pM\n",
++				   partner_info->vdev_id, partner_info->hw_link_id,
++				   partner_info->vdev_addr.addr);
+ 
+ 			partner_info++;
+ 		}
+@@ -2807,8 +2788,8 @@
+ 		for (i = 0; i < arg->num_hint_bssid; ++i) {
+ 			hint_bssid->freq_flags =
+ 				arg->hint_bssid[i].freq_flags;
+-			ether_addr_copy(&hint_bssid->bssid.addr[0],
+-					&arg->hint_bssid[i].bssid.addr[0]);
++			ether_addr_copy(&arg->hint_bssid[i].bssid.addr[0],
++					&hint_bssid->bssid.addr[0]);
+ 			hint_bssid++;
+ 		}
+ 	}
+@@ -4770,16 +4751,14 @@
+ 	if (svc_rdy_ext->n_mac_phy_caps >= svc_rdy_ext->tot_phy_id)
+ 		return -ENOBUFS;
+ 
++	len = min_t(u16, len, sizeof(struct ath12k_wmi_mac_phy_caps_params));
+ 	if (!svc_rdy_ext->n_mac_phy_caps) {
+-		svc_rdy_ext->mac_phy_caps =
+-			kzalloc_objs(*svc_rdy_ext->mac_phy_caps,
+-				     svc_rdy_ext->tot_phy_id,
+-				     GFP_ATOMIC);
++		svc_rdy_ext->mac_phy_caps = kzalloc((svc_rdy_ext->tot_phy_id) * len,
++						    GFP_ATOMIC);
+ 		if (!svc_rdy_ext->mac_phy_caps)
+ 			return -ENOMEM;
+ 	}
+ 
+-	len = min_t(u16, len, sizeof(struct ath12k_wmi_mac_phy_caps_params));
+ 	memcpy(svc_rdy_ext->mac_phy_caps + svc_rdy_ext->n_mac_phy_caps, ptr, len);
+ 	svc_rdy_ext->n_mac_phy_caps++;
+ 	return 0;
+@@ -6734,12 +6713,16 @@
+ 	return 0;
+ }
+ 
+-static int freq_to_idx(struct ieee80211_hw *hw, int freq)
++static int freq_to_idx(struct ath12k *ar, int freq)
+ {
+ 	struct ieee80211_supported_band *sband;
++	struct ieee80211_hw *hw = ath12k_ar_to_hw(ar);
+ 	int band, ch, idx = 0;
+ 
+ 	for (band = NL80211_BAND_2GHZ; band < NUM_NL80211_BANDS; band++) {
++		if (!ar->mac.sbands[band].channels)
++			continue;
++
+ 		sband = hw->wiphy->bands[band];
+ 		if (!sband)
+ 			continue;
+@@ -7089,29 +7072,25 @@
+ {
+ 	struct wmi_peer_delete_resp_event peer_del_resp;
+ 	struct ath12k *ar;
+-	u32 vdev_id;
+ 
+ 	if (ath12k_pull_peer_del_resp_ev(ab, skb, &peer_del_resp) != 0) {
+-		ath12k_warn(ab, "failed to extract peer delete resp\n");
++		ath12k_warn(ab, "failed to extract peer delete resp");
+ 		return;
+ 	}
+ 
+-	vdev_id = le32_to_cpu(peer_del_resp.vdev_id);
+-
+ 	rcu_read_lock();
+-	ar = ath12k_mac_get_ar_by_vdev_id(ab, vdev_id);
++	ar = ath12k_mac_get_ar_by_vdev_id(ab, le32_to_cpu(peer_del_resp.vdev_id));
+ 	if (!ar) {
+-		ath12k_warn(ab, "invalid vdev id in peer delete resp ev %d\n",
+-			    vdev_id);
++		ath12k_warn(ab, "invalid vdev id in peer delete resp ev %d",
++			    peer_del_resp.vdev_id);
+ 		rcu_read_unlock();
+ 		return;
+ 	}
+ 
+-	ath12k_peer_delete_resp_signal(ar, vdev_id,
+-				       peer_del_resp.peer_macaddr.addr);
++	complete(&ar->peer_delete_done);
+ 	rcu_read_unlock();
+ 	ath12k_dbg(ab, ATH12K_DBG_WMI, "peer delete resp for vdev id %d addr %pM\n",
+-		   vdev_id, peer_del_resp.peer_macaddr.addr);
++		   peer_del_resp.vdev_id, peer_del_resp.peer_macaddr.addr);
+ }
+ 
+ static void ath12k_vdev_delete_resp_event(struct ath12k_base *ab,
+@@ -7650,7 +7629,6 @@
+ {
+ 	struct wmi_chan_info_event ch_info_ev = {};
+ 	struct ath12k *ar;
+-	struct ath12k_hw *ah;
+ 	struct survey_info *survey;
+ 	int idx;
+ 	/* HW channel counters frequency value in hertz */
+@@ -7682,7 +7660,6 @@
+ 		return;
+ 	}
+ 	spin_lock_bh(&ar->data_lock);
+-	ah = ath12k_ar_to_ah(ar);
+ 
+ 	switch (ar->scan.state) {
+ 	case ATH12K_SCAN_IDLE:
+@@ -7694,8 +7671,8 @@
+ 		break;
+ 	}
+ 
+-	idx = freq_to_idx(ath12k_ar_to_hw(ar), le32_to_cpu(ch_info_ev.freq));
+-	if (idx >= ARRAY_SIZE(ah->survey)) {
++	idx = freq_to_idx(ar, le32_to_cpu(ch_info_ev.freq));
++	if (idx >= ARRAY_SIZE(ar->survey)) {
+ 		ath12k_warn(ab, "chan info: invalid frequency %d (idx %d out of bounds)\n",
+ 			    ch_info_ev.freq, idx);
+ 		goto exit;
+@@ -7708,20 +7685,14 @@
+ 		cc_freq_hz = (le32_to_cpu(ch_info_ev.mac_clk_mhz) * 1000);
+ 
+ 	if (ch_info_ev.cmd_flags == WMI_CHAN_INFO_START_RESP) {
+-		scoped_guard(spinlock_bh, &ah->survey_lock) {
+-			survey = &ah->survey[idx];
+-			memset(survey, 0, sizeof(*survey));
+-			survey->noise = le32_to_cpu(ch_info_ev.noise_floor);
+-			survey->time =
+-				div_u64(le32_to_cpu(ch_info_ev.cycle_count),
+-					cc_freq_hz);
+-			survey->time_busy =
+-				div_u64(le32_to_cpu(ch_info_ev.rx_clear_count),
+-					cc_freq_hz);
+-			survey->filled = SURVEY_INFO_NOISE_DBM |
+-					 SURVEY_INFO_TIME |
+-					 SURVEY_INFO_TIME_BUSY;
+-		}
++		survey = &ar->survey[idx];
++		memset(survey, 0, sizeof(*survey));
++		survey->noise = le32_to_cpu(ch_info_ev.noise_floor);
++		survey->filled = SURVEY_INFO_NOISE_DBM | SURVEY_INFO_TIME |
++				 SURVEY_INFO_TIME_BUSY;
++		survey->time = div_u64(le32_to_cpu(ch_info_ev.cycle_count), cc_freq_hz);
++		survey->time_busy = div_u64(le32_to_cpu(ch_info_ev.rx_clear_count),
++					    cc_freq_hz);
+ 	}
+ exit:
+ 	spin_unlock_bh(&ar->data_lock);
+@@ -7734,7 +7705,6 @@
+ 	struct wmi_pdev_bss_chan_info_event bss_ch_info_ev = {};
+ 	struct survey_info *survey;
+ 	struct ath12k *ar;
+-	struct ath12k_hw *ah;
+ 	u32 cc_freq_hz = ab->cc_freq_hz;
+ 	u64 busy, total, tx, rx, rx_bss;
+ 	int idx;
+@@ -7775,31 +7745,28 @@
+ 		return;
+ 	}
+ 
+-	ah = ath12k_ar_to_ah(ar);
+-
+-	idx = freq_to_idx(ath12k_ar_to_hw(ar), le32_to_cpu(bss_ch_info_ev.freq));
+-	if (idx >= ARRAY_SIZE(ah->survey)) {
++	spin_lock_bh(&ar->data_lock);
++	idx = freq_to_idx(ar, le32_to_cpu(bss_ch_info_ev.freq));
++	if (idx >= ARRAY_SIZE(ar->survey)) {
+ 		ath12k_warn(ab, "bss chan info: invalid frequency %d (idx %d out of bounds)\n",
+ 			    bss_ch_info_ev.freq, idx);
+ 		goto exit;
+ 	}
+ 
+-	scoped_guard(spinlock_bh, &ah->survey_lock) {
+-		survey = &ah->survey[idx];
+-
+-		survey->noise = le32_to_cpu(bss_ch_info_ev.noise_floor);
+-		survey->time = div_u64(total, cc_freq_hz);
+-		survey->time_busy = div_u64(busy, cc_freq_hz);
+-		survey->time_rx = div_u64(rx_bss, cc_freq_hz);
+-		survey->time_tx = div_u64(tx, cc_freq_hz);
+-		survey->filled |= (SURVEY_INFO_NOISE_DBM |
+-				   SURVEY_INFO_TIME |
+-				   SURVEY_INFO_TIME_BUSY |
+-				   SURVEY_INFO_TIME_RX |
+-				   SURVEY_INFO_TIME_TX);
+-	}
++	survey = &ar->survey[idx];
+ 
++	survey->noise     = le32_to_cpu(bss_ch_info_ev.noise_floor);
++	survey->time      = div_u64(total, cc_freq_hz);
++	survey->time_busy = div_u64(busy, cc_freq_hz);
++	survey->time_rx   = div_u64(rx_bss, cc_freq_hz);
++	survey->time_tx   = div_u64(tx, cc_freq_hz);
++	survey->filled   |= (SURVEY_INFO_NOISE_DBM |
++			     SURVEY_INFO_TIME |
++			     SURVEY_INFO_TIME_BUSY |
++			     SURVEY_INFO_TIME_RX |
++			     SURVEY_INFO_TIME_TX);
+ exit:
++	spin_unlock_bh(&ar->data_lock);
+ 	complete(&ar->bss_survey_done);
+ 
+ 	rcu_read_unlock();
+@@ -9067,19 +9034,12 @@
+ 					  const u32 *vdev_ids)
+ {
+ 	u32 current_switch_count = le32_to_cpu(ev->current_switch_count);
+-	u32 vdev_ids_len = ath12k_wmi_tlv_data_len(vdev_ids);
+ 	u32 num_vdevs = le32_to_cpu(ev->num_vdevs);
+ 	struct ieee80211_bss_conf *conf;
+ 	struct ath12k_link_vif *arvif;
+ 	struct ath12k_vif *ahvif;
+ 	int i;
+ 
+-	if (num_vdevs > vdev_ids_len / sizeof(*vdev_ids)) {
+-		ath12k_warn(ab, "csa switch count num_vdevs %u exceeds tlv array length %u\n",
+-			    num_vdevs, vdev_ids_len);
+-		return;
+-	}
+-
+ 	rcu_read_lock();
+ 	for (i = 0; i < num_vdevs; i++) {
+ 		arvif = ath12k_mac_get_arvif_by_vdev_id(ab, vdev_ids[i]);
+@@ -9969,7 +9929,6 @@
+ 	void *ptr = skb->data;
+ 	struct ath12k *ar;
+ 	u16 tlv_tag;
+-	u16 tlv_len;
+ 	u32 event_count;
+ 	int ret;
+ 
+@@ -9985,7 +9944,6 @@
+ 
+ 	tlv = (struct wmi_tlv *)ptr;
+ 	tlv_tag = le32_get_bits(tlv->header, WMI_TLV_TAG);
+-	tlv_len = le32_get_bits(tlv->header, WMI_TLV_LEN);
+ 	ptr += sizeof(*tlv);
+ 
+ 	if (tlv_tag != WMI_TAG_HALPHY_CTRL_PATH_EVENT_FIXED_PARAM) {
+@@ -9993,12 +9951,6 @@
+ 		return;
+ 	}
+ 
+-	if (tlv_len < sizeof(*fixed_param)) {
+-		ath12k_warn(ab, "TPC stats fixed param tlv len %u too short\n",
+-			    tlv_len);
+-		return;
+-	}
+-
+ 	fixed_param = (struct ath12k_wmi_pdev_tpc_stats_event_fixed_params *)ptr;
+ 	rcu_read_lock();
+ 	ar = ath12k_mac_get_ar_by_pdev_id(ab, le32_to_cpu(fixed_param->pdev_id) + 1);
+@@ -10305,12 +10257,12 @@
+ 	struct wmi_cmd_hdr *cmd_hdr;
+ 	enum wmi_tlv_event_id id;
+ 
+-	cmd_hdr = skb_pull_data(skb, sizeof(*cmd_hdr));
+-	if (!cmd_hdr)
+-		goto out;
+-
++	cmd_hdr = (struct wmi_cmd_hdr *)skb->data;
+ 	id = le32_get_bits(cmd_hdr->cmd_id, WMI_CMD_HDR_CMD_ID);
+ 
++	if (!skb_pull(skb, sizeof(struct wmi_cmd_hdr)))
++		goto out;
++
+ 	switch (id) {
+ 		/* Process all the WMI events here */
+ 	case WMI_SERVICE_READY_EVENTID:
+diff -urN k726/linux-7.2.6/drivers/net/wireless/ath/ath12k/wmi.h k724/linux-7.2.4/drivers/net/wireless/ath/ath12k/wmi.h
+--- a/drivers/net/wireless/ath/ath12k/wmi.h	2026-09-14 13:41:11.000000000 +0200
++++ b/drivers/net/wireless/ath/ath12k/wmi.h	2026-09-07 17:37:28.000000000 +0200
+@@ -2954,14 +2954,10 @@
+ #define ATH12K_WMI_FLAG_MLO_EMLSR_SUPPORT		BIT(6)
+ #define ATH12K_WMI_FLAG_MLO_FORCED_INACTIVE		BIT(7)
+ #define ATH12K_WMI_FLAG_MLO_LINK_ADD			BIT(8)
+-#define ATH12K_WMI_FLAG_MLO_START_AS_ACTIVE		BIT(17)
+-#define ATH12K_WMI_FLAG_MLO_IEEE_LINK_IDX_VALID		BIT(18)
+-#define ATH12K_WMI_FLAG_MLO_IEEE_LINK_IDX_VALID_PARTNER	BIT(19)
+ 
+ struct wmi_vdev_start_mlo_params {
+ 	__le32 tlv_header;
+ 	__le32 flags;
+-	__le32 ieee_link_id;
+ } __packed;
+ 
+ struct wmi_partner_link_info {
+@@ -2969,8 +2965,6 @@
+ 	__le32 vdev_id;
+ 	__le32 hw_link_id;
+ 	struct ath12k_wmi_mac_addr_params vdev_addr;
+-	__le32 flags;
+-	__le32 ieee_link_id;
+ } __packed;
+ 
+ struct wmi_vdev_delete_cmd {
+@@ -3126,7 +3120,6 @@
+ 	bool primary_umac;
+ 	bool logical_link_idx_valid;
+ 	u32 logical_link_idx;
+-	u32 ieee_link_id;
+ };
+ 
+ struct wmi_ml_arg {
+@@ -3134,7 +3127,6 @@
+ 	bool assoc_link;
+ 	bool mcast_link;
+ 	bool link_add;
+-	u32 ieee_link_id;
+ 	u8 num_partner_links;
+ 	struct wmi_ml_partner_info partner_info[ATH12K_WMI_MLO_MAX_LINKS];
+ };
