@@ -34,7 +34,20 @@ SHORT_PRESS_SECS   = 0.8   # release within this = "a press" -> suspend
 RESUME_IGNORE_SECS = 3.0   # swallow KEY_POWER this long after any resume
 RESCAN_SECS        = 5     # re-enumerate devices that (dis)appeared
 SUSPEND_TIMEOUT    = 5     # never let a stuck systemctl block the loop
+STEAM_TIMEOUT      = 5     # bound the steam -ifrunning handoff
+STEAM_GRACE_SECS   = 6     # let Steam draw its sleep screen before falling back
 BACKLIGHT_GLOB     = "/sys/class/backlight/*/bl_power"
+# Game Mode handoff. In Game Mode the power button belongs to STEAM: it draws its own
+# sleep screen (the Steam logo) and suspends itself. Calling systemctl suspend straight
+# away skips that UI entirely — ArmadaOS's powerbuttond does exactly this handoff
+# (`steam -ifrunning steam://shortpowerpress`), which is why its suspend shows the logo.
+# The session selector records the active session in SESSION_FILE; the native client
+# lives under the session user's home (same contract as pocknix-steam and /usr/bin/steam).
+SESSION_FILE       = os.environ.get("POCKNIX_SESSION_FILE", "/home/deck/.local/state/pocknix-session")
+SESSION_USER       = os.environ.get("POCKNIX_SESSION_USER", "deck")
+STEAM_DIR          = os.environ.get("POCKNIX_STEAM_DIR", f"/home/{SESSION_USER}/.local/share/Steam")
+STEAM_CLIENT_DIR   = f"{STEAM_DIR}/steamrtarm64"
+STEAM_CLIENT       = f"{STEAM_CLIENT_DIR}/steam"
 # DRM connector DPMS ("On"/"Off"/...) is the reliable screen state. The Odin 3's backlight
 # bl_power node is stuck at 4 (FB_BLANK_POWERDOWN) even when the panel is lit.
 DRM_DPMS_GLOB      = "/sys/class/drm/card*-*/dpms"
@@ -80,7 +93,39 @@ def screen_is_on():
             continue
     return not found   # nodes exist and none were 0 -> off; no nodes at all -> assume on
 
+def game_mode_active():
+    """True while the Game Mode session owns the display (session selector)."""
+    try:
+        with open(SESSION_FILE, encoding="utf-8") as fh:
+            return fh.read().strip() == "gamescope"
+    except OSError:
+        return False
+
+def steam_handoff(uri):
+    """Hand the press to Steam. False if it could not even be delivered."""
+    if not os.access(STEAM_CLIENT, os.X_OK):
+        return False
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = f"{STEAM_CLIENT_DIR}:{STEAM_DIR}/lib/aarch64-linux-gnu"
+    try:
+        subprocess.run([STEAM_CLIENT, "-ifrunning", f"steam://{uri}"],
+                       cwd=STEAM_CLIENT_DIR, env=env, timeout=STEAM_TIMEOUT,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
 def do_suspend():
+    # Game Mode: let Steam show its sleep screen and suspend (it owns the power UI).
+    if game_mode_active() and steam_handoff("shortpowerpress"):
+        dbg("short press -> steam://shortpowerpress (Game Mode)")
+        time.sleep(STEAM_GRACE_SECS)
+        # If Steam ignored us (wrong UI state) don't leave the button dead: the screen
+        # is still lit, so suspend ourselves. When Steam did suspend, we resume here
+        # with the panel dark and must NOT suspend again.
+        if not screen_is_on():
+            return
+        dbg("steam handoff did not suspend; falling back to systemctl")
     dbg("short press -> suspending")
     try:
         subprocess.run(["systemctl", "suspend"], timeout=SUSPEND_TIMEOUT,
