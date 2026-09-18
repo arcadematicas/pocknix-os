@@ -2,7 +2,7 @@
 # "Mesa Version" tweak selects by pointing VK_DRIVER_FILES at them (ARM Proton path).
 # Counterpart of pocknix-turnip-x86; same per-SoC tuning contract as packages/soc/mesa.
 pkgname=pocknix-turnip-arm
-pkgver=20260904
+pkgver=20260918
 pkgrel=1
 pkgdesc="Pinned aarch64 Turnip builds for per-game Mesa selection (SoC-tuned)"
 arch=('aarch64')
@@ -19,7 +19,7 @@ makedepends=(meson ninja python-mako python-packaging python-yaml python-ply gls
 options=(!lto)
 # The "devel" entry is a PINNED mesa main snapshot (main carries no tag) — pinned, not floating,
 # so rebuilds reproduce; refresh _develcommit deliberately.
-_develcommit=dc886f34eb1764770ca448b967b0879b1bf4bf51
+_develcommit=54c629ae6642389f891338e25a3e09a4e71102fd
 # 26.2 comes from mesa's own vk-arm payload; pinning mesa's pkgver here = file conflict.
 _versions=('25.0.7' '25.1.9' '25.2.8' '25.3.6' '26.0.8' '26.1.6' '26.3.0devel')
 source=('0001-c11-threads-fix-build-on-c23.patch'
