@@ -37,7 +37,7 @@ sha256sums=('SKIP'
             '59217efeac3b64e7ced958324b9db7494f1e0741aeb22d780276514cc1b8f206'
             'caf1c0061a68e88dfa74967a7e780c0e85d65b6c4e334cd69095a5dc54ad78bc'
             '5296b88a0f1e012e2cb9ada150a2bbadf728ca81e5a4fb2ab43c83a4d2158606'
-            '9f5bf9a8081b0b54a9c76a1f5c815608b46791f502e97d23575d487427e9aa12')
+            'f0df33dea142ae14d4e06fb3340ebe43cf4449ebb0322a9a387a9ea488d2f217')
 
 # The devel snapshot extracts to mesa-<commit>, releases to mesa-<ver>; RC tarballs keep the
 # hyphen that makepkg forbids in a version string, so our entries strip it and this restores it.
