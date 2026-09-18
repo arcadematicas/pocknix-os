@@ -147,7 +147,14 @@ def _apply_config(data):
     left_sides = _side_segments("left")
     right_sides = _side_segments("right")
     if not data["enabled"]:
-        for led in left_leds + right_leds + left_sides + right_sides:
+        # Odin 3 names ONE LED-class node per CHANNEL per segment (l:r1 / l:g1 / l:b1) and
+        # _segments() only returns the RED ones, so zeroing `brightness` on those left green
+        # and blue lit — with the default cyan (r=0, g=200, b=255) turning the RGB off
+        # appeared to do nothing at all. Zero the whole trio instead: _write_segment already
+        # knows the Odin 3 layout (and the generic multicolor one).
+        for led in left_leds + right_leds:
+            _write_segment(led, (0, 0, 0), 0)
+        for led in left_sides + right_sides:
             try:
                 (led / "brightness").write_text("0\n", encoding="utf-8")
             except OSError:
