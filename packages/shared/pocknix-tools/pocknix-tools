@@ -236,9 +236,25 @@ do_deckstation() {
     return 0
   fi
   kdialog --title "$TITLE" --warningcontinuecancel \
-    "Download the DeckStation emulators?\n\nDeckStation is a portable emulation system (ES-DE). This fetches the ARM64 emulator AppImages (~1 GB) into /opt/deckstation/Apps and installs the portable launchers.\n\nNeeds a network connection and can take a while. Safe to re-run: emulators already downloaded are skipped." \
+    "Prepare DeckStation?\n\nDeckStation is a portable emulation system (ES-DE). This fetches the ARM64 emulator AppImages (~1 GB) into /opt/deckstation/Apps, installs the portable launchers, lays down the base config and the RetroArch menu assets.\n\nNeeds a network connection and can take a while. Safe to re-run: what is already there is skipped." \
     || return 0
   konsole -e /bin/bash -c "${setup}; echo; read -rp 'Press Enter to close... '"
+  # WProton es la otra mitad de la capa de emulacion (juegos de Windows). Su
+  # asistente de primera puesta en marcha es interactivo, asi que se OFRECE.
+  do_wproton
+}
+
+# WProton (Windows games: Proton/Wine). Su primer arranque lanza un asistente que
+# elige el runner, la config basica y lo anade al modo juego de Steam.
+do_wproton() {
+  local wp="/usr/bin/wproton"
+  if [ ! -x "${wp}" ]; then
+    return 0   # WProton no instalado: nada que hacer
+  fi
+  kdialog --title "$TITLE" --yesno \
+    "Set up WProton too?\n\nWProton runs Windows games (Proton/Wine). Its first-run wizard picks the runner and the basic settings, and adds WProton to Steam's Game Mode.\n\nRun the wizard now? (You can also run it later from this menu.)" \
+    || return 0
+  konsole -e /bin/bash -c "${wp}; echo; read -rp 'Press Enter to close... '"
 }
 
 # MAKO Decky (Lossless Scaling frame generation) reads Lossless.dll at runtime from a
@@ -277,7 +293,8 @@ while :; do
     rolling) items+=(mode "Return to locked mode (recommended)...") ;;
   esac
   items+=(installer "Install or remove internal Pocknix...")
-  items+=(deckstation "Download DeckStation (emulators)...")
+  items+=(deckstation "Prepare DeckStation (emulators)...")
+  items+=(wproton "Set up WProton (Windows games)...")
   items+=(mako-dll "Install Lossless Scaling DLL (MAKO)...")
   abl_label="$(abl_item_label "$(abl_status)")" && items+=(abl "${abl_label}")
   if [ "$(ssh_state)" = on ]; then items+=(ssh "Remote access (SSH) is ON - turn it off")
@@ -294,6 +311,7 @@ while :; do
     mode)              do_mode ;;
     installer)         /usr/bin/pocknix-installer-gui || true ;;
     deckstation)       do_deckstation ;;
+    wproton)           do_wproton ;;
     mako-dll)          do_mako_dll ;;
     abl)               do_abl ;;
     ssh)               do_ssh ;;

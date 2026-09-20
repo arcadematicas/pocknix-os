@@ -3,6 +3,18 @@
 Configuraciones personalizadas importadas desde el proyecto DeckStation ARM
 (`/run/media/fransis/8TB/deckstation-arm/`) al repo portable deckstation-arm.
 
+> **Esta carpeta ES la configuración base de DeckStation.** El script
+> `scripts/deckstation-configs.sh` la despliega en el `.AppImage.home` de cada
+> emulador siguiendo `deploy-manifest.txt`, y lo invocan `deckstation-setup.sh`
+> (al instalar) y `deckstation-launcher.sh` (en cada arranque, como
+> auto-reparación). **No es destructivo**: solo copia lo que falte; `--force`
+> resetea a estos valores y `--dry-run` simula.
+>
+> Antes el despliegue real dependía de un `payload/` de MediaFire del Updater
+> (carpeta compartida `1ixylxeqkr0wo`, x86_64). Ese payload **ya no hace falta**:
+> con estos ficheros + el manifiesto, una instalación nueva queda configurada
+> sola (ES-DE con sus sistemas, RetroArch con la config saneada, etc.).
+
 ## Qué se copió y por qué
 
 | Emulador | Archivo(s) | Origen | Notas |
@@ -31,7 +43,8 @@ Configuraciones personalizadas importadas desde el proyecto DeckStation ARM
 
 ## Qué NO se copió (y por qué)
 
-- **AppImages** — binarios grandes que se descargan con `setup_arm64_apps.py`.
+- **AppImages** — binarios grandes que descarga el **Updater** (`updater/git.txt`).
+  Antes los bajaba `setup_arm64_apps.py` (retirado el 18/09).
 - **ROMs / saves / memcards / savestates** — contenido del usuario, privado.
 - **Caches** (shader cache, mesa) — se regeneran en runtime.
 - **`QtProject.conf`** de DuckStation/Azahar — solo estado de UI con paths
