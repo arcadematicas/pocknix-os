@@ -243,7 +243,7 @@ configure() {
     --enable KALLSYMS_ALL \
     --enable SCHED_CLUSTER \
     --disable DEBUG_INFO_NONE \
-    --enable DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT \
+    --enable DEBUG_INFO_DWARF4 \
     --disable DEBUG_INFO_REDUCED \
     --enable DEBUG_INFO_BTF \
     --enable SCHED_CLASS_EXT \
