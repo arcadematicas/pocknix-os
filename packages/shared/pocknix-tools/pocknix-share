@@ -45,7 +45,13 @@ case "${1:-status}" in
     # pkexec's text agent, broken on polkit 127 (polkit#686) - see dev/desktop.md.
     need_root
     is_installed && { echo "installed=yes"; exit 0; }
-    pacman -Syu --needed --noconfirm samba
+    # -Sy (refrescar indices) + instalar SOLO samba: 1 paquete, sin arrastrar deps.
+    # OJO: NO usar -Syu. La imagen esta construida sobre un snapshot CONGELADO de
+    # ALARM; un -Syu en el dispositivo subiria ~260 paquetes (systemd, glasma...)
+    # solo por instalar samba y desarmaria la combinacion probada. Y NO usar -S a
+    # secas: en una imagen recien flasheada /var/lib/pacman/sync/ esta vacio y falla
+    # con "database file for 'core' does not exist" (el fallo real reportado).
+    pacman -Sy --needed --noconfirm samba
     echo "installed=yes"
     ;;
   on)
