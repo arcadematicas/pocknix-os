@@ -126,3 +126,8 @@ scx-scheds           # sched_ext schedulers incl. scx_lavd (big.LITTLE / latency
                      #   pocknix-lavd.service runs `scx_lavd --autopilot`. Needs the
                      #   SCHED_CLASS_EXT + DEBUG_INFO_BTF kernel (build-kernel.sh) and the
                      #   schedutil governor (kernel default) for LAVD's per-core DVFS.
+
+# libXss: la necesita el RetroArch de DeckStation (binario nativo del buildbot,
+# enlaza contra libXss.so.1). El snapshot de ALARM no lo trae -> se resuelve del
+# fallback de ALARM que render_pacman_conf deja debajo.
+libxss
