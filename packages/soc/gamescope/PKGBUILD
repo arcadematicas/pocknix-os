@@ -33,7 +33,8 @@ source=("gamescope::git+https://github.com/ValveSoftware/gamescope.git#commit=${
         '0007-Add-composited-output-rotation-for-displays-that-can.patch'
         '0008-steamcompmgr-classify-the-interactive-overlay-by-out.patch'
         # NUESTRO: hace que el atom GAMESCOPE_FPS_LIMIT del QAM se quede (ver el parche)
-        '0009-fps-limit-atom-persist.patch')
+        '0009-fps-limit-atom-persist.patch'
+        '0010-DRMBackend-add-rotated-output-max-height.patch')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {
@@ -47,6 +48,7 @@ prepare() {
   patch -p1 < "${srcdir}/0008-steamcompmgr-classify-the-interactive-overlay-by-out.patch"
   # NUESTRO (pocknix-odin3-support): el QAM frame limiter no tenia efecto en HW.
   patch -p1 < "${srcdir}/0009-fps-limit-atom-persist.patch"
+  patch -p1 < "${srcdir}/0010-DRMBackend-add-rotated-output-max-height.patch"
 }
 
 build() {
