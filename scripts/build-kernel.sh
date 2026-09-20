@@ -154,9 +154,17 @@ configure() {
   #    the choice defaults to DEBUG_INFO_NONE, and BTF vanishes the same silent way
   #    (shipped once: lavd skipped on the RP5, session fell back to EEVDF,
   #    2026-07-13). Enable DEBUG_KERNEL (a visibility gate; sm8550 — our perf
-  #    baseline — already ships =y) + force the choice off NONE onto
-  #    DWARF_TOOLCHAIN_DEFAULT (both no-ops on sm8550). Both target symbols are
-  #    covered by the post-olddefconfig assertions, which is how this was caught.
+#    baseline — already ships =y) + force the choice off NONE onto
+#    DWARF4 (both no-ops on sm8550). Both target symbols are covered by the
+#    post-olddefconfig assertions, which is how this was caught.
+#    DWARF4, NOT DWARF_TOOLCHAIN_DEFAULT: with GCC 16 the toolchain default is
+#    DWARF 5, and pahole 1.32 emits MALFORMED module BTF from it. The kernel then
+#    rejects EVERY module ("failed to validate module [...] BTF: -22" in dmesg) —
+#    no audio (soundwire/lpass), no vhci-hcd (InputPlumber's virtual pad) and no
+#    zram. DWARF 4 makes pahole emit valid BTF. Verify with
+#    `pahole -F btf --btf_base <vmlinux> <module>.ko` (it prints structs, not
+#    "Malformed BTF string section"). Shipped once with DWARF 5: the Odin booted
+#    with no audio/controls and the Steam first-run OOBE, 2026-09-20.
   #  - KALLSYMS_ALL: also DEBUG_KERNEL-gated, also missing from the sm8250 base
   #    config (sm8550 ships =y). scx_lavd's BPF resolves the per-cpu 'runqueues'
   #    ksym via kallsyms, and DATA symbols are only listed with _ALL — without it

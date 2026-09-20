@@ -91,9 +91,17 @@ if [ -n "${POCKNIX_TOUCH2_NAME:-}" ]; then
   systemctl stop pocknix-second-screen.service 2>/dev/null || true
 fi
 
-# Rotation autodetects (scanout when the plane can, else composited; dev/graphics.md).
-# Panels past the DPU rotator's 1088-line cap must opt in here or scan out black.
+# Rotation autodetects: gamescope rotates at scanout (the DPU's inline rotator) when the
+# plane can, else in the composite pass. The rotator only accepts a rotated plane whose
+# PRE-rotation source height fits --rotated-output-max-height (1088 lines on the SM8750
+# DPU): passing it clamps the logical output so the scanout rotation stays legal and the
+# plane upscales back to the mode for free. Below the cap it is a no-op (our 1080-wide
+# panel keeps the full logical output). Without it, a panel past the cap scans out black.
 GS_ROTATE=()
+if [ -n "${POCKNIX_PANEL_ROTATE_MAX_H:-}" ]; then
+  GS_ROTATE+=(--rotated-output-max-height "${POCKNIX_PANEL_ROTATE_MAX_H}")
+fi
+# Opt-in escape hatch: force the (always-works, but per-frame GPU) composite rotation.
 if [ "${POCKNIX_PANEL_ROTATE_SHADER:-0}" = "1" ]; then
   GS_ROTATE=(--force-composition-rotation)
 fi
