@@ -6,6 +6,14 @@
 tailscale
 wireguard-tools      # no openresolv for wg-quick DNS: conflicts with the base's systemd-resolvconf
 
+# --- libXss: la necesita el RetroArch de DeckStation ---
+# El RetroArch de DeckStation NO es un AppImage: es el binario nativo del buildbot,
+# que enlaza contra libXss.so.1. Sin este paquete ES-DE no lanza NINGUN emulador de
+# RetroArch ("libXss.so.1: cannot open shared object file"). Se hospeda aqui para que
+# un dispositivo lo instale desde el snapshot PINNADO y no del ALARM en vivo (mezclar
+# la familia samba fue exactamente el bug del 20/09).
+libxss
+
 # --- file sharing ---
 samba
 
