@@ -135,3 +135,7 @@ libxss
 # tk: el Updater de DeckStation es una GUI de tkinter y sin libtk8.6.so
 # no abre su ventana (ImportError: libtk8.6.so: cannot open shared object file).
 tk
+
+# 7zip: el Updater de DeckStation descomprime assets .7z (p. ej. RetroArch.7z
+# del buildbot) y sin el binario `7z` esa instalacion falla.
+7zip
