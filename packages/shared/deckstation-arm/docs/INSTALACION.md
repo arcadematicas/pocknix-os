@@ -16,7 +16,7 @@
 
 ```bash
 # Clonar el repo
-git clone https://github.com/arcadematicas/deckstation-arm.git
+git clone https://github.com/stshunz/deckstation-arm.git
 cd deckstation-arm
 
 # Compilar el paquete
@@ -48,52 +48,41 @@ sudo chmod +x /opt/deckstation/scripts/*.sh
 sudo ln -sf /opt/deckstation/scripts/deckstation-launcher.sh /usr/local/bin/deckstation
 ```
 
-## Descarga de emuladores
+## Instalación de los emuladores
 
-Una vez instalado el paquete, necesitas descargar los emuladores:
+Una vez instalado el paquete, la instalación inicial los pone **todos**:
 
 ```bash
-# Ejecutar setup
 deckstation-setup
 ```
 
-Esto descargará automáticamente:
-- **RetroArch**: Emulador multi-sistema (NES, SNES, GBA, N64, etc.)
-- **Dolphin**: GameCube y Wii
-- **Core cores**: Módulos adicionales de RetroArch
+Esto hace, en orden:
+
+1. Prepara el entorno: assets de RetroArch, cores del sistema, `libXss`.
+2. **Instala los 30 emuladores** de `updater/git.txt` en modo headless
+   (`updater.py --install-all`), con progreso y un resumen de los que fallen.
+3. Despliega `lanzar.sh` y las configs de fábrica en cada emulador. **Imprescindible**:
+   el `es_find_rules.xml` de ES-DE apunta a `Apps/<Emulador>/lanzar.sh`, no al AppImage.
+4. Reparte las BIOS que hayas puesto en `bios/`.
+
+Es **reejecutable**: lo que ya está instalado se salta. Son ~1,5 GB.
 
 ### Opciones del setup
 
 ```bash
-# Descarga normal (omite si ya existe)
-deckstation-setup
-
-# Forzar re-descarga completa
-deckstation-setup --force
-
-# Ver ayuda
-deckstation-setup --help
+deckstation-setup           # instalación normal (omite lo que ya existe)
+deckstation-setup --force   # re-descargar también lo que ya existe
+deckstation-setup --help    # ayuda
 ```
 
-### Descarga manual de emuladores
+### Actualizar o añadir emuladores sueltos
 
-Si prefieres instalar manualmente:
+Para eso está el **Updater** (ES-DE → Updater): lista los 30 con su estado, permite
+instalar/actualizar de uno en uno, tiene una entrada "Instalación completa inicial" y
+muestra el estado de las BIOS. Desde la terminal usa el mismo motor:
 
-#### RetroArch
 ```bash
-# Opción A: Desde pacman
-sudo pacman -S retroarch retroarch-assets
-
-# Opción B: Desde el setup
-deckstation-setup
-```
-
-#### Dolphin
-```bash
-# Desde pacman
-sudo pacman -S dolphin-emu
-
-# El setup creará symlinks automáticos
+python3 /opt/deckstation/Apps/Updater/updater.py --install-all   # instala lo que falte
 ```
 
 #### AetherSX2 (PS2)
@@ -104,6 +93,49 @@ sudo pacman -S dolphin-emu
 # 2. Usar versiones alternativas
 # Ver: https://github.com/AetherSX2/... para más info
 ```
+
+## Configuración base y BIOS
+
+### Configuración base (automática)
+
+La carpeta `configs/` **es** la configuración de fábrica de DeckStation (ES-DE con sus
+sistemas y reglas, RetroArch saneado, DuckStation, Dolphin, Flycast, ...). Se despliega
+sola en el `.AppImage.home` de cada emulador:
+
+- `deckstation-setup.sh` la aplica al terminar de instalar.
+- `deckstation-launcher.sh` la reaplica en cada arranque (auto-reparación: es no-op
+  cuando ya está todo).
+
+A mano:
+
+```bash
+deckstation-configs.sh            # despliega lo que falte (no destructivo)
+deckstation-configs.sh --dry-run  # ver qué haría, sin tocar nada
+deckstation-configs.sh --force    # resetear a los valores de fábrica
+```
+
+El mapa de qué config va a dónde está en `configs/deploy-manifest.txt`.
+
+### BIOS y firmware
+
+Las BIOS tienen copyright: DeckStation **no las incluye ni las descarga**. Deja las tuyas
+(extraídas de tus propias consolas) en `/opt/deckstation/bios/<sistema>/` — ver
+`bios/README.md` para saber qué fichero necesita cada sistema — y se reparten solas a
+donde cada emulador las espera:
+
+```bash
+deckstation-bios.sh --check    # INFORME: qué falta y dónde va cada una
+deckstation-bios.sh            # reparte lo que falte (no destructivo)
+deckstation-bios.sh --dry-run  # ver qué haría
+```
+
+El informe compara lo que tienes en `bios/<sistema>/` con `bios/required.txt` (qué
+fichero espera cada sistema, con alternativas) y muestra el destino de cada uno. También
+se ve **desde el salón**: ES-DE → Updater → **BIOS / Firmware**, y desde
+**Pocknix Tools → DeckStation BIOS**.
+
+También se ejecuta en cada arranque desde el launcher, así que basta con dejar los
+ficheros y abrir DeckStation. El mapa está en `bios/deploy-bios.txt`.
 
 ## Uso básico
 
