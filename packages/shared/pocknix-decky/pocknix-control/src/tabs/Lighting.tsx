@@ -1,10 +1,10 @@
 import { ButtonItem, Field, PanelSection, PanelSectionRow, ToggleField } from "@decky/ui";
 import type { Dispatch, SetStateAction } from "react";
-import { useState } from "react";
-import { runOledRefresher, setLed, setLedEnabled, setLedLinked, setLedSides } from "../backend";
+import { useEffect, useState } from "react";
+import { oledCareStatus, runOledRefresher, setLed, setLedEnabled, setLedLinked, setLedSideEnabled, setLedSides } from "../backend";
 import { ColorControls } from "../components/ColorControls";
 import { hsvToRgb, rgbToHsv } from "../lib/rgb";
-import type { Config, LedSide, LedSideKey } from "../types";
+import type { Config, LedSide, LedSideKey, OledCareStatus } from "../types";
 
 // Stored RGB holds the full-value color; the kernel multicolor class scales each
 // channel by brightness/max_brightness, so dimming is linear and the color survives.
@@ -19,6 +19,15 @@ function sideHsv(side: LedSide): [number, number, number] {
   return rgbToHsv(side.r, side.g, side.b);
 }
 
+// "hace 3 min" / "hace 2 h" — para que se vea que el OLED care trabaja de verdad.
+function hace(ts: number | null | undefined): string {
+  if (!ts) return "todavía no";
+  const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+  if (s < 60) return `hace ${s} s`;
+  if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
+  return `hace ${Math.floor(s / 3600)} h`;
+}
+
 export function Lighting({ config, setConfig, reload }: {
   config: Config;
   setConfig: Dispatch<SetStateAction<Config | null>>;
@@ -28,15 +37,31 @@ export function Lighting({ config, setConfig, reload }: {
   const leftHsv = sideHsv(led.left);
   const rightHsv = sideHsv(led.right);
   const [refresherMsg, setRefresherMsg] = useState<string | null>(null);
+  const [oled, setOled] = useState<OledCareStatus | null>(null);
+
+  const refrescarEstado = () => {
+    oledCareStatus().then(setOled).catch(() => setOled(null));
+  };
+  useEffect(refrescarEstado, []);
 
   const commitLeft = (hsv: [number, number, number], brightness: number) => commit("left", hsv, brightness, setConfig, reload);
   const commitRight = (hsv: [number, number, number], brightness: number) => commit("right", hsv, brightness, setConfig, reload);
   const commitBoth = (hsv: [number, number, number], brightness: number) => commit("both", hsv, brightness, setConfig, reload);
 
+  // Apagado individual de un stick (como en Android): conserva color y brillo.
+  const toggleSide = (side: "left" | "right", value: boolean) =>
+    setLedSideEnabled(side, value)
+      .then((next) => setConfig((cur) => (cur ? { ...cur, led: next } : cur)))
+      .catch(() => reload());
+
   const runRefresher = () => {
     setRefresherMsg("Refreshing pixels…");
     runOledRefresher()
-      .then((status) => setRefresherMsg(status.running ? "Pixel refresh in progress (~9s)." : "Pixel refresh finished."))
+      .then((status) => {
+        setOled(status);
+        setRefresherMsg(status.running ? "Pixel refresh in progress (~9s)." : "Pixel refresh finished.");
+        window.setTimeout(refrescarEstado, 12000);
+      })
       .catch((error) => setRefresherMsg(String(error)));
   };
 
@@ -92,10 +117,30 @@ export function Lighting({ config, setConfig, reload }: {
         ) : (
           <>
             <PanelSection title="LEFT STICK">
-              <ColorControls zone="left" hsv={leftHsv} brightness={led.left.brightness} onCommit={commitLeft} />
+              <PanelSectionRow>
+                <ToggleField
+                  label="Enable"
+                  description="Turn this stick off on its own (keeps its color)."
+                  checked={led.left.enabled}
+                  onChange={(value) => toggleSide("left", value)}
+                />
+              </PanelSectionRow>
+              {led.left.enabled && (
+                <ColorControls zone="left" hsv={leftHsv} brightness={led.left.brightness} onCommit={commitLeft} />
+              )}
             </PanelSection>
             <PanelSection title="RIGHT STICK">
-              <ColorControls zone="right" hsv={rightHsv} brightness={led.right.brightness} onCommit={commitRight} />
+              <PanelSectionRow>
+                <ToggleField
+                  label="Enable"
+                  description="Turn this stick off on its own (keeps its color)."
+                  checked={led.right.enabled}
+                  onChange={(value) => toggleSide("right", value)}
+                />
+              </PanelSectionRow>
+              {led.right.enabled && (
+                <ColorControls zone="right" hsv={rightHsv} brightness={led.right.brightness} onCommit={commitRight} />
+              )}
             </PanelSection>
           </>
         )
@@ -114,6 +159,25 @@ export function Lighting({ config, setConfig, reload }: {
         {refresherMsg ? (
           <PanelSectionRow>
             <Field label="" description={refresherMsg} />
+          </PanelSectionRow>
+        ) : null}
+        <PanelSectionRow>
+          <Field
+            label="Automatic"
+            description={
+              oled && !oled.available
+                ? "Not available on this device."
+                : oled && !oled.daemonUp
+                  ? "Daemon not running (no state yet)."
+                  : oled
+                    ? `Every ${Math.round(oled.idleSeconds / 60)} min idle · last: ${hace(oled.lastRefresh)} (${oled.count})`
+                    : "…"
+            }
+          />
+        </PanelSectionRow>
+        {oled?.lastSkip ? (
+          <PanelSectionRow>
+            <Field label="Last skip" description={oled.lastSkip} />
           </PanelSectionRow>
         ) : null}
       </PanelSection>

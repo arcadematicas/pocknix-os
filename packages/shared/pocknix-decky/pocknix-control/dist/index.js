@@ -33,9 +33,11 @@ const configDir = () => call("config_dir");
 const readConfig = (path) => call("read_config", path);
 const applyConfig = (path, sourceAppid, targetAppid, targetName) => call("apply_config", path, sourceAppid, targetAppid, targetName);
 const setLed = (side, r, g, b, brightness) => call("set_led", side, r, g, b, brightness);
+const setLedSideEnabled = (side, enabled) => call("set_led_side_enabled", side, enabled);
 const setLedLinked = (linked) => call("set_led_linked", linked);
 const setLedEnabled = (enabled) => call("set_led_enabled", enabled);
 const setLedSides = (sides) => call("set_led_sides", sides);
+const oledCareStatus = () => call("oled_care_status");
 const runOledRefresher = (duration, passes) => call("run_oled_refresher", duration, passes);
 const detectSdcard = () => call("detect_sdcard");
 const formatSdcard = (label) => call("format_sdcard", label);
@@ -1138,18 +1140,42 @@ function commit(side, hsv, brightness, setConfig, reload) {
 function sideHsv(side) {
     return rgbToHsv(side.r, side.g, side.b);
 }
+// "hace 3 min" / "hace 2 h" — para que se vea que el OLED care trabaja de verdad.
+function hace(ts) {
+    if (!ts)
+        return "todavía no";
+    const s = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+    if (s < 60)
+        return `hace ${s} s`;
+    if (s < 3600)
+        return `hace ${Math.floor(s / 60)} min`;
+    return `hace ${Math.floor(s / 3600)} h`;
+}
 function Lighting({ config, setConfig, reload }) {
     const led = config.led;
     const leftHsv = sideHsv(led.left);
     const rightHsv = sideHsv(led.right);
     const [refresherMsg, setRefresherMsg] = SP_REACT.useState(null);
+    const [oled, setOled] = SP_REACT.useState(null);
+    const refrescarEstado = () => {
+        oledCareStatus().then(setOled).catch(() => setOled(null));
+    };
+    SP_REACT.useEffect(refrescarEstado, []);
     const commitLeft = (hsv, brightness) => commit("left", hsv, brightness, setConfig, reload);
     const commitRight = (hsv, brightness) => commit("right", hsv, brightness, setConfig, reload);
     const commitBoth = (hsv, brightness) => commit("both", hsv, brightness, setConfig, reload);
+    // Apagado individual de un stick (como en Android): conserva color y brillo.
+    const toggleSide = (side, value) => setLedSideEnabled(side, value)
+        .then((next) => setConfig((cur) => (cur ? { ...cur, led: next } : cur)))
+        .catch(() => reload());
     const runRefresher = () => {
         setRefresherMsg("Refreshing pixels…");
         runOledRefresher()
-            .then((status) => setRefresherMsg(status.running ? "Pixel refresh in progress (~9s)." : "Pixel refresh finished."))
+            .then((status) => {
+            setOled(status);
+            setRefresherMsg(status.running ? "Pixel refresh in progress (~9s)." : "Pixel refresh finished.");
+            window.setTimeout(refrescarEstado, 12000);
+        })
             .catch((error) => setRefresherMsg(String(error)));
     };
     return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "STICK LIGHTS", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Enable", checked: led.enabled, onChange: (value) => setLedEnabled(value)
@@ -1158,7 +1184,13 @@ function Lighting({ config, setConfig, reload }) {
                                 .then((next) => setConfig((cur) => (cur ? { ...cur, led: next } : cur)))
                                 .catch(() => reload()) }) }), led.sidesAvailable && (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Side Lights", description: "Match the side lighting to the sticks.", checked: led.sides, disabled: !led.enabled, onChange: (value) => setLedSides(value)
                                 .then((next) => setConfig((cur) => (cur ? { ...cur, led: next } : cur)))
-                                .catch(() => reload()) }) }))] }), led.enabled && (led.linked ? (SP_JSX.jsx(DFL.PanelSection, { title: "BOTH STICKS", children: SP_JSX.jsx(ColorControls, { zone: "both", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitBoth }) })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsx(DFL.PanelSection, { title: "LEFT STICK", children: SP_JSX.jsx(ColorControls, { zone: "left", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitLeft }) }), SP_JSX.jsx(DFL.PanelSection, { title: "RIGHT STICK", children: SP_JSX.jsx(ColorControls, { zone: "right", hsv: rightHsv, brightness: led.right.brightness, onCommit: commitRight }) })] }))), SP_JSX.jsxs(DFL.PanelSection, { title: "OLED CARE", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", description: "Run the anti image-retention pixel refresh (fullscreen noise, ~9s).", onClick: runRefresher, children: "Run Pixel Refresher" }) }), refresherMsg ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "", description: refresherMsg }) })) : null] })] }));
+                                .catch(() => reload()) }) }))] }), led.enabled && (led.linked ? (SP_JSX.jsx(DFL.PanelSection, { title: "BOTH STICKS", children: SP_JSX.jsx(ColorControls, { zone: "both", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitBoth }) })) : (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "LEFT STICK", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Enable", description: "Turn this stick off on its own (keeps its color).", checked: led.left.enabled, onChange: (value) => toggleSide("left", value) }) }), led.left.enabled && (SP_JSX.jsx(ColorControls, { zone: "left", hsv: leftHsv, brightness: led.left.brightness, onCommit: commitLeft }))] }), SP_JSX.jsxs(DFL.PanelSection, { title: "RIGHT STICK", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Enable", description: "Turn this stick off on its own (keeps its color).", checked: led.right.enabled, onChange: (value) => toggleSide("right", value) }) }), led.right.enabled && (SP_JSX.jsx(ColorControls, { zone: "right", hsv: rightHsv, brightness: led.right.brightness, onCommit: commitRight }))] })] }))), SP_JSX.jsxs(DFL.PanelSection, { title: "OLED CARE", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", description: "Run the anti image-retention pixel refresh (fullscreen noise, ~9s).", onClick: runRefresher, children: "Run Pixel Refresher" }) }), refresherMsg ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "", description: refresherMsg }) })) : null, SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Automatic", description: oled && !oled.available
+                                ? "Not available on this device."
+                                : oled && !oled.daemonUp
+                                    ? "Daemon not running (no state yet)."
+                                    : oled
+                                        ? `Every ${Math.round(oled.idleSeconds / 60)} min idle · last: ${hace(oled.lastRefresh)} (${oled.count})`
+                                        : "…" }) }), oled?.lastSkip ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Last skip", description: oled.lastSkip }) })) : null] })] }));
 }
 
 const SHOWN_UPDATES = 8;

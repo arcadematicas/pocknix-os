@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "py_modules"))
 
 from pocknix_control.config import build_config
 from pocknix_control.configio import apply_config, config_dir, export_config, read_config
-from pocknix_control.led import restore_led, set_led, set_led_enabled, set_led_linked, set_led_sides
+from pocknix_control.led import (restore_led, set_led, set_led_enabled, set_led_linked,
+                                 set_led_side_enabled, set_led_sides)
 from pocknix_control.mako import mako_status
 from pocknix_control.modes import set_fan_mode, set_lavd_mode
 from pocknix_control.oled_care import oled_care_status, run_refresher
@@ -70,6 +71,9 @@ class Plugin:
     # commits repeatedly while it is being dialled in.
     async def set_led(self, side, r, g, b, brightness):
         return await asyncio.to_thread(set_led, side, r, g, b, brightness)
+
+    async def set_led_side_enabled(self, side, enabled):
+        return await asyncio.to_thread(set_led_side_enabled, side, enabled)
 
     async def set_led_linked(self, linked):
         return await asyncio.to_thread(set_led_linked, linked)

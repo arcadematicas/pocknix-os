@@ -50,8 +50,10 @@ DEFAULTS = {
     "enabled": False,
     "linked": True,
     "sides": True,
-    "left": {"r": 0, "g": 200, "b": 255, "brightness": 180},
-    "right": {"r": 0, "g": 200, "b": 255, "brightness": 180},
+    # "enabled" por stick: asi se puede apagar SOLO el izquierdo o SOLO el derecho
+    # (como en Android). El color y el brillo se conservan al apagarlo.
+    "left": {"enabled": True, "r": 0, "g": 200, "b": 255, "brightness": 180},
+    "right": {"enabled": True, "r": 0, "g": 200, "b": 255, "brightness": 180},
 }
 
 
@@ -78,6 +80,7 @@ def _sanitize(data):
         src = data.get(side)
         if isinstance(src, dict):
             clean[side] = {
+                "enabled": bool(src.get("enabled", DEFAULTS[side]["enabled"])),
                 "r": _clamp_byte(src.get("r", DEFAULTS[side]["r"])),
                 "g": _clamp_byte(src.get("g", DEFAULTS[side]["g"])),
                 "b": _clamp_byte(src.get("b", DEFAULTS[side]["b"])),
@@ -162,11 +165,19 @@ def _apply_config(data):
         return
     left = data["left"]
     right = data["right"] if not data["linked"] else left
-    _apply_side(left_leds, _rgb(left), left["brightness"])
-    _apply_side(right_leds, _rgb(right), right["brightness"])
+    # Un stick apagado se pinta en negro a brillo 0 (conservando su color guardado,
+    # para que al volver a encenderlo recupere lo que tenia).
+    left_on = bool(left.get("enabled", True))
+    right_on = bool(right.get("enabled", True))
+    _apply_side(left_leds, _rgb(left) if left_on else (0, 0, 0),
+                left["brightness"] if left_on else 0)
+    _apply_side(right_leds, _rgb(right) if right_on else (0, 0, 0),
+                right["brightness"] if right_on else 0)
     if data["sides"]:
-        _apply_side(left_sides, _rgb(left), left["brightness"])
-        _apply_side(right_sides, _rgb(right), right["brightness"])
+        _apply_side(left_sides, _rgb(left) if left_on else (0, 0, 0),
+                    left["brightness"] if left_on else 0)
+        _apply_side(right_sides, _rgb(right) if right_on else (0, 0, 0),
+                    right["brightness"] if right_on else 0)
     else:
         for led in left_sides + right_sides:
             try:
@@ -201,12 +212,26 @@ def set_led(side, r, g, b, brightness):
         return _with_available(data)
 
 
+def set_led_side_enabled(side, enabled):
+    """Enciende/apaga UN stick (el otro no se toca). Como en Android."""
+    if side not in ("left", "right"):
+        raise ValueError(f"unknown led side: {side!r}")
+    with _LOCK:
+        data = _load()
+        data[side]["enabled"] = bool(enabled)
+        _save(data)
+        _apply_config(data)
+    return _with_available(data)
+
+
 def set_led_linked(linked):
     with _LOCK:
         data = _load()
         data["linked"] = bool(linked)
         if data["linked"]:
             data["right"] = copy.deepcopy(data["left"])
+            # Enlazado = mismo color Y mismo estado: si uno estaba apagado, los dos.
+            data["right"]["enabled"] = data["left"]["enabled"]
         _save(data)
         _apply_config(data)
         return _with_available(data)

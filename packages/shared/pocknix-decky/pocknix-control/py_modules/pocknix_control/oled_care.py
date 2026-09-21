@@ -8,12 +8,16 @@ refresher".
 
 from __future__ import annotations
 
+import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 REFRESHER_BIN = Path("/usr/local/bin/oled-refresher")
+# Estado que deja oled-care-daemon.py (en /run: tmpfs, se reinicia con el equipo).
+# Es lo que permite decir en la pestana Lighting CUANDO fue el ultimo refresco y
+# por que se salto el ultimo intento.
+STATE_PATH = Path("/run/pocknix/oled-care.json")
 DEFAULT_DURATION = 3  # seconds per pass
 DEFAULT_PASSES = 3
 CELL_PX = 3
@@ -125,9 +129,19 @@ def run_refresher(duration: int | None = None, passes: int | None = None) -> dic
 
 
 def oled_care_status() -> dict:
+    try:
+        estado = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        estado = {}
     return {
         "available": refresher_available(),
         "running": refresher_running(),
         "defaultDuration": DEFAULT_DURATION,
         "defaultPasses": DEFAULT_PASSES,
+        # Del daemon automatico (puede faltar si aun no ha arrancado)
+        "daemonUp": bool(estado.get("started")),
+        "lastRefresh": estado.get("lastRefresh"),
+        "lastSkip": estado.get("lastSkip"),
+        "count": estado.get("count", 0),
+        "idleSeconds": estado.get("idleSeconds", 0),
     }

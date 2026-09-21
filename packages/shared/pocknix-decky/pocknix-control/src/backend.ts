@@ -13,6 +13,8 @@ export const applyConfig = (path: string, sourceAppid: string, targetAppid: stri
   call<[string, string, string, string], ConfigImportResult>("apply_config", path, sourceAppid, targetAppid, targetName);
 export const setLed = (side: LedSideKey, r: number, g: number, b: number, brightness: number) =>
   call<[LedSideKey, number, number, number, number], LedConfig>("set_led", side, r, g, b, brightness);
+export const setLedSideEnabled = (side: "left" | "right", enabled: boolean) =>
+  call<["left" | "right", boolean], LedConfig>("set_led_side_enabled", side, enabled);
 export const setLedLinked = (linked: boolean) => call<[boolean], LedConfig>("set_led_linked", linked);
 export const setLedEnabled = (enabled: boolean) => call<[boolean], LedConfig>("set_led_enabled", enabled);
 export const setLedSides = (sides: boolean) => call<[boolean], LedConfig>("set_led_sides", sides);

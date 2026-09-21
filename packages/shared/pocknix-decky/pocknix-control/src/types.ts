@@ -120,6 +120,8 @@ export interface SdcardInfo {
 }
 
 export interface LedSide {
+  /** Apagado individual del stick (como en Android): conserva color y brillo. */
+  enabled: boolean;
   r: number;
   g: number;
   b: number;
@@ -143,6 +145,12 @@ export interface OledCareStatus {
   running: boolean;
   defaultDuration: number;
   defaultPasses: number;
+  /** Del daemon automatico: ultimo refresco (epoch) y por que se salto el ultimo. */
+  daemonUp: boolean;
+  lastRefresh: number | null;
+  lastSkip: string | null;
+  count: number;
+  idleSeconds: number;
 }
 
 export interface MakoStatus {
