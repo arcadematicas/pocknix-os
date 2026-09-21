@@ -18,9 +18,10 @@ source=('pocknix-desktop' 'pocknix-desktop-rotate' 'pocknix-desktop-rotate.deskt
         'ksplashrc' 'pocknix-x11.conf'
         'powerdevilrc' 'kscreenlockerrc'
         'pocknix-fontcache-prune' '99-pocknix-fontcache.hook'
-        'pocknix-panel-touchfix' '98-pocknix-panel-touchfix.hook')
+        'pocknix-panel-touchfix' '98-pocknix-panel-touchfix.hook'
+        'pocknix-places' 'pocknix-places.desktop')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-desktop"          "${pkgdir}/usr/bin/pocknix-desktop"
@@ -34,6 +35,11 @@ package() {
   install -Dm755 "${srcdir}/pocknix-desktop-env"          "${pkgdir}/usr/bin/pocknix-desktop-env"
   install -Dm644 "${srcdir}/pocknix-desktop-env.desktop"  \
     "${pkgdir}/etc/xdg/autostart/pocknix-desktop-env.desktop"
+
+  # Marcadores de Dolphin para DeckStation y WProton (viven en /opt, fuera del home)
+  install -Dm755 "${srcdir}/pocknix-places"               "${pkgdir}/usr/bin/pocknix-places"
+  install -Dm644 "${srcdir}/pocknix-places.desktop"       \
+    "${pkgdir}/etc/xdg/autostart/pocknix-places.desktop"
   # Remove the leftover gesture-bar taskpanel every session (see the script header for why).
   install -Dm755 "${srcdir}/pocknix-desktop-remove-taskpanel" \
     "${pkgdir}/usr/bin/pocknix-desktop-remove-taskpanel"
