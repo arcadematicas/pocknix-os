@@ -131,3 +131,7 @@ scx-scheds           # sched_ext schedulers incl. scx_lavd (big.LITTLE / latency
 # enlaza contra libXss.so.1). El snapshot de ALARM no lo trae -> se resuelve del
 # fallback de ALARM que render_pacman_conf deja debajo.
 libxss
+
+# tk: el Updater de DeckStation es una GUI de tkinter y sin libtk8.6.so
+# no abre su ventana (ImportError: libtk8.6.so: cannot open shared object file).
+tk
