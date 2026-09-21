@@ -148,9 +148,15 @@ install_local_packages() {
   # portable con deckstation-cores.sh). Va fuera del gate POCKNIX_EMULATION porque
   # DeckStation es nuestra capa y siempre va. OPTIONAL-warn: el build de Suyu es
   # pesado (submodulos + cmake); si falla, la imagen sale sin el core de Switch.
-  for oe in suyu-libretro; do
+  # libretro-cores-pocknix trae los 25 cores aarch64 curados (NES, SNES, N64, GB/GBA,
+  # NDS, MD, Saturn, Dreamcast, PSX, PSP, PCE, arcade, Atari...). SIN ESTE PAQUETE
+  # RetroArch de DeckStation se queda sin cores y no se puede jugar a casi nada:
+  # deckstation-cores.sh solo ENLAZA lo que encuentre en /usr/lib/libretro, no lo
+  # descarga. Estaba declarado como dependencia de pocknix-emulation-full, que es
+  # OPT-IN (POCKNIX_EMULATION=1), asi que nuestras imagenes salian sin el.
+  for oe in suyu-libretro libretro-cores-pocknix; do
     chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
-      || warn "optional core ${oe} not in [pocknix-shared] (build failed/skipped?) — Switch ships WITHOUT its RetroArch core"
+      || warn "optional core ${oe} not in [pocknix-shared] (build failed/skipped?) — DeckStation ships WITHOUT it"
   done
   # Kernel: swap ALARM's generic linux-aarch64 for our SoC kernel package (Image + modules,
   # built by `make kernel` -> staged into the package). Its own step (not bundled above) so a
