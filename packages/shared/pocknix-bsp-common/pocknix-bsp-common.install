@@ -9,8 +9,8 @@ _migrate_fan_lavd() {
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/pocknix-game-mode.conf 2>/dev/null || true
-    systemctl enable pocknix-fancontrol.service pocknix-lavd.service 2>/dev/null || true
-    systemctl try-restart pocknix-fancontrol.service pocknix-lavd.service 2>/dev/null || true
+    systemctl enable pocknix-fancontrol.service pocknix-lavd.service pocknix-scx.service 2>/dev/null || true
+    systemctl try-restart pocknix-fancontrol.service pocknix-lavd.service pocknix-scx.service 2>/dev/null || true
   fi
 }
 
