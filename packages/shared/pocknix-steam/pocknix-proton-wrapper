@@ -170,7 +170,12 @@ def apply_mesa_version(settings, real_proton):
     # enumeration, so a wrong-arch icd would strand the game driverless — any miss skips
     # with a note. Set VK_ICD_FILENAMES too for older loaders.
     value = str(settings.get("mesaVersion", "") or "").strip()
-    m = re.fullmatch(r"(?:(arm|x86):)?([0-9][0-9.]*(?:rc[0-9]+)?)", value)
+    # A value is either a SERIES ("25.2", "26.2.3", "arm:26.2") or the FULL name of a standalone
+    # payload ("26.3.0devel", "26.3.0_devel.gitabc426bb-valve"). The old pattern was numbers,
+    # dots and an optional "rcN", so PocknixControl's suffixed options were dropped SILENTLY here
+    # and the game silently ran on the default driver. Allow letters and the _ + ~ - separators
+    # those names use; the leading [0-9] still forbids ".", ".." and any path trickery.
+    m = re.fullmatch(r"(?:(arm|x86):)?([0-9][0-9A-Za-z.+_~-]*)", value)
     if not m:
         return
     arch, version = m.groups()
