@@ -120,6 +120,10 @@ mark "starting gamescope"
 # Steam/gamescope feature gates (portado de ArmadaOS; sin ellas Steam no expone VRR/tearing/HDR/NIS/fps-limiter dinámico en el QAM)
 # gamescope WSI layer: the game presents straight into gamescope's compositor.
 export ENABLE_GAMESCOPE_WSI=1
+# Entorno Steam Deck: habilita en el cliente los flags/UI propios de la Deck (incl. los ajustes
+# de HDR). Nota de gates pendiente (AGENTS.md); armada por su parte identifica la Deck con
+# `-steamdeck` (que ya pasamos). Se anade por si habilita el toggle de HDR en la UI.
+export SteamDeck=1
 export STEAM_GAMESCOPE_VRR_SUPPORTED=1
 export STEAM_MANGOAPP_PRESETS_SUPPORTED=1
 export STEAM_USE_MANGOAPP=1
@@ -127,6 +131,10 @@ export STEAM_USE_DYNAMIC_VRS=1
 export STEAM_GAMESCOPE_HAS_TEARING_SUPPORT=1
 export STEAM_GAMESCOPE_TEARING_SUPPORTED=1
 export STEAM_GAMESCOPE_HDR_SUPPORTED=1
+# Identifica el panel interno (edidless) para que gamescope enganche el perfil de color/HDR de
+# /usr/share/gamescope/scripts/10-armada/ayn.icna3520.oled.lua (650 nits, gamma 2.2). Sin esto el
+# panel de la Odin no reporta HDR y el QAM no ofrece la opcion. (portado de armada-os)
+export GAMESCOPE_INTERNAL_DEVICE_ID=ayn-odin-3
 export STEAMOS_STEAM_REBOOT_SENTINEL="/tmp/steamos-reboot-sentinel"
 export REBOOT_SENTINEL="$STEAMOS_STEAM_REBOOT_SENTINEL"
 export STEAMOS_STEAM_SHUTDOWN_SENTINEL="/tmp/steamos-shutdown-sentinel"
