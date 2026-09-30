@@ -5,11 +5,15 @@
 pkgbase=mesa
 pkgname=(mesa vulkan-freedreno)
 epoch=2
-pkgver=26.2.3
-# differs from pkgver only for RCs: the tarball keeps the hyphen makepkg forbids in pkgver
-_srcver=${pkgver}
+pkgver=26.3.0
+# Snapshot de mesa main (26.3.0-devel). Antes: 26.2.3 (tarball de release).
+# 30/09/2026: subido a 26.3.0-devel porque el Steam Frame de Valve (Deckard) ya usa
+# 26.3.0_devel y su regla es clara: lo que Valve publica para ARM suele ir por delante.
+# El commit fija el snapshot para que el build sea reproducible (mismo criterio que
+# pocknix-turnip-arm con su _develcommit).
+_srcver=aa35464ee50c1311eb6cebb9882d02738642b692
 pkgrel=1
-pkgdesc="Mesa trimmed for the RP6/SM8550: freedreno GL + turnip Vulkan, cortex-x3 tuned (${_srcver})"
+pkgdesc="Mesa 26.3.0-devel trimmed for the RP6/SM8550: freedreno GL + turnip Vulkan, cortex-x3 tuned"
 arch=('aarch64')
 url="https://www.mesa3d.org/"
 license=("MIT AND BSD-3-Clause AND SGI-B-2.0")
@@ -23,8 +27,8 @@ makedepends=(
 )
 # upstream considers LTO broken until explicit notice (Arch mesa does the same)
 options=(!lto)
-source=("https://archive.mesa3d.org/mesa-${_srcver}.tar.xz")
-sha256sums=('1628058a8d2c0615975de5a15ab7bbb9638c50000b5bed9456ff423ea034a81f')
+source=("https://gitlab.freedesktop.org/mesa/mesa/-/archive/${_srcver}/mesa-${_srcver}.tar.gz")
+sha256sums=('8ee51aba092ad300db09e32fadf199581286a90f6bb576e08b88915add4e38bd')
 
 prepare() {
   cd "mesa-${_srcver}"
