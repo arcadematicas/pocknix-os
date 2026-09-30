@@ -148,12 +148,15 @@ install_local_packages() {
   # portable con deckstation-cores.sh). Va fuera del gate POCKNIX_EMULATION porque
   # DeckStation es nuestra capa y siempre va. OPTIONAL-warn: el build de Suyu es
   # pesado (submodulos + cmake); si falla, la imagen sale sin el core de Switch.
-  # libretro-cores-pocknix trae los 25 cores aarch64 curados (NES, SNES, N64, GB/GBA,
+  # libretro-cores-pocknix trae los ~255 cores aarch64 curados (NES, SNES, N64, GB/GBA,
   # NDS, MD, Saturn, Dreamcast, PSX, PSP, PCE, arcade, Atari...). SIN ESTE PAQUETE
-  # RetroArch de DeckStation se queda sin cores y no se puede jugar a casi nada:
-  # deckstation-cores.sh solo ENLAZA lo que encuentre en /usr/lib/libretro, no lo
-  # descarga. Estaba declarado como dependencia de pocknix-emulation-full, que es
-  # OPT-IN (POCKNIX_EMULATION=1), asi que nuestras imagenes salian sin el.
+  # RetroArch de DeckStation se queda sin cores y no se puede jugar a casi nada.
+  # Estaba declarado como dependencia de pocknix-emulation-full, que es OPT-IN
+  # (POCKNIX_EMULATION=1), asi que nuestras imagenes salian sin el.
+  # OJO (30/09/2026): deckstation-cores.sh ya no ENLAZA, COPIA -> estos cores
+  # acaban DENTRO de DeckStation (autonomia del SO del cliente). Ademas
+  # deckstation-setup.sh descarga los que falten (deckstation-cores-fetch.sh,
+  # solo azahar + bsnes-hd, que nadie publica) al instalar DeckStation.
   for oe in suyu-libretro libretro-cores-pocknix; do
     chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
       || warn "optional core ${oe} not in [pocknix-shared] (build failed/skipped?) — DeckStation ships WITHOUT it"
