@@ -161,6 +161,14 @@ install_local_packages() {
     chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/${oe}" 2>/dev/null \
       || warn "optional core ${oe} not in [pocknix-shared] (build failed/skipped?) — DeckStation ships WITHOUT it"
   done
+  # pocknix-wsquashfs: comprimir juegos a .wsquashfs desde el clic derecho de
+  # Dolphin o la terminal. En la Odin los juegos van en una microSD pequeña y
+  # comprimirlos libera espacio. Trae los scripts, los menus de KDE 6 y el tipo
+  # MIME; el motor (mksquashfs/unsquashfs) viene por config/packages/base.list
+  # (squashfs-tools). OPTIONAL-warn: si el paquete no se construyo, la imagen
+  # sale sin el compresor, pero arranca igual.
+  chroot "${root}" pacman -S --noconfirm --needed "pocknix-shared/pocknix-wsquashfs" 2>/dev/null \
+    || warn "pocknix-wsquashfs not in [pocknix-shared] — the Odin ships WITHOUT the wsquashfs compressor"
   # Kernel: swap ALARM's generic linux-aarch64 for our SoC kernel package (Image + modules,
   # built by `make kernel` -> staged into the package). Its own step (not bundled above) so a
   # missing kernel build errors clearly, and the replace is deterministic. `provides=linux`.
