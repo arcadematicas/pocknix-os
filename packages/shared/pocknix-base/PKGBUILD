@@ -8,7 +8,10 @@ pkgver=0.2.0
 #    installed package owns. Without this, `pacman -Syu` aborted forever on the leftover
 #    plutovg/plutosvg/libFLAC.so.8/libpcap.so.0.8/Valve-Turnip files pocknix wrote into
 #    fielded devices outside pacman, so a user without a terminal could never update.
-pkgrel=6
+# 7: pkgrel 6 was published with SELF/PACMAN pointing at a local test harness (the paths
+#    got rewritten by a sed before the file was shipped). Same filename, different bytes:
+#    never republish those, clients cache by filename. Fixed + trailing newline restored.
+pkgrel=7
 pkgdesc="Locked/rolling base mode switch and desktop updater for pocknix"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"

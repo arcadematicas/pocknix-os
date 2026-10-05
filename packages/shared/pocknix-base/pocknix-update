@@ -9,11 +9,11 @@
 # system is the partial-upgrade trap.
 set -euo pipefail
 
-SELF=/tmp/opencode/test/root/bin/pocknix-update
+SELF=/usr/bin/pocknix-update
 # Absolute, never bare "pacman": this script is also called from a systemd unit via /bin/sh
 # and can be inherited by a FEX-rootfs environment, where a bare name resolves into the guest
 # overlay (a foreign pacman on a stock pacman.conf) instead of the host's.
-PACMAN=/tmp/opencode/test/bin/pacman
+PACMAN=/usr/bin/pacman
 
 # --- why this is not just "pacman -Syu" ---------------------------------------
 # A bare `pacman -Syu` ABORTS the whole transaction when a file it wants to install is
