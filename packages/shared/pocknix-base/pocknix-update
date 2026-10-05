@@ -1,11 +1,165 @@
 #!/bin/bash
-# pocknix-update — terminal system updater behind the "Pocknix Updater" Plasma entry.
+# pocknix-update — the system updater. Two doors, one engine:
+#   * the "Pocknix Updater" entry in Plasma (no arguments, interactive)
+#   * the QAM's update button (`--noninteractive`), driven by pocknix-decky's
+#     py_modules/pocknix_control/updates.py (the plugin does not build its own pacman
+#     command any more: two copies of this policy is how they would drift apart).
 # Starts as the session user and re-execs itself through pkexec (passwordless for wheel via
 # 50-pocknix-deck.rules). Always -Syu, never -Sy: a refreshed index on an un-upgraded
 # system is the partial-upgrade trap.
 set -euo pipefail
 
-SELF=/usr/bin/pocknix-update
+SELF=/tmp/opencode/test/root/bin/pocknix-update
+# Absolute, never bare "pacman": this script is also called from a systemd unit via /bin/sh
+# and can be inherited by a FEX-rootfs environment, where a bare name resolves into the guest
+# overlay (a foreign pacman on a stock pacman.conf) instead of the host's.
+PACMAN=/tmp/opencode/test/bin/pacman
+
+# --- why this is not just "pacman -Syu" ---------------------------------------
+# A bare `pacman -Syu` ABORTS the whole transaction when a file it wants to install is
+# already on disk and NO installed package owns it:
+#
+#     error: could not perform operation (conflicting files)
+#     plutovg: /usr/include/plutovg/plutovg.h exists in filesystem
+#     ==> ERROR: failed to prepare transaction (conflicting files)
+#
+# Nothing is left half-installed (pacman discards the transaction), so the device is not
+# broken — but the update can never land, so anyone without a terminal is stuck for good.
+#
+# pocknix MANUFACTURED those unowned files. They were not left by the image build (every
+# install_local_packages step goes through pacman): they were written straight into the
+# rootfs of a fielded device, and only LATER given an owner as a package:
+#   * tools/install-deckard-mesa.sh wrote the Valve Turnip payload into
+#     /usr/share/pocknix/vk-arm/26.3.0-valve/ plus the libdisplay-info.so.1 alias, with
+#     `install -D`, outside pacman (26/09). That exact payload became pocknix-vk-valve
+#     (27/09), which owns precisely those files.
+#   * plutovg/plutosvg/libFLAC.so.8/libpcap.so.0.8 were hand-installed on 30/09-01/10 to make
+#     the prebuilt ARMSX2/uae4arm libretro cores load (tarball extract + a compiled FLAC
+#     1.3.4). A week later they became the packages plutovg, plutosvg and
+#     pocknix-soname-compat, which own precisely those files.
+# Every orphan is therefore one of OUR paths, which is what makes the narrow policy below
+# safe.
+#
+# Two layers, narrowest first:
+#   1. A BOUNDED --overwrite on the paths those four packages own. Because the list is
+#      bounded, it can never authorise a package to take a file away from some OTHER
+#      installed package — that would be a real packaging bug to report, not to paper over.
+#      In practice this layer alone is enough, so the common case never shows the user a
+#      failed update at all.
+#   2. SELF-HEAL: if pacman still reports conflicts, run ONCE more with --overwrite narrowed
+#      to exactly the paths pacman itself named, and only to those `pacman -Qo` answers "no
+#      package owns". Layer 2 is what keeps this working for the next orphan nobody has seen
+#      yet, and it needs no edit here — it reads pacman's own output. A path that DOES belong
+#      to an installed package is never clobbered and aborts the retry with an explanation.
+#
+# Everything printed is machine-readable on purpose: the QAM shows this log verbatim, so
+# these message blocks are the only thing a user without a terminal ever sees of a failure.
+# Keep them short.
+#
+# ⚠ Keep this list in step with the degraded fallback in pocknix-decky's updates.py — that
+# module only uses its copy when this script is missing. One line per path GROUP, not per
+# file; the source of truth for the exact file list is `bsdtar -tf` of the four packages.
+read -r -d '' OVERWRITE_BASE <<'EOF' || true
+/usr/include/plutovg/*
+/usr/include/plutosvg/*
+/usr/lib/cmake/plutovg/*
+/usr/lib/cmake/plutosvg/*
+/usr/lib/pkgconfig/plutovg.pc
+/usr/lib/pkgconfig/plutosvg.pc
+/usr/lib/libplutovg.so*
+/usr/lib/libplutosvg.so*
+/usr/lib/libFLAC.so.8*
+/usr/lib/libpcap.so.0.8*
+/usr/lib/libdisplay-info.so.1*
+/usr/share/pocknix/vk-arm/*
+EOF
+
+# pacman prints one line per conflict as "<pkgname>: <absolute-path> <prose>". The prose is
+# translated ("exists in filesystem" / "existe en el sistema de archivos") and must not be
+# matched, but this shape is locale-independent: a package name can never contain ':' or
+# start with '/'.
+CONFLICT_LINE_RE='^[A-Za-z0-9@._+-]+: /[^ ]*'
+
+# A -Syu that survives unowned leftovers. Extra args pass through to pacman
+# (--noconfirm, --noprogressbar). Returns pacman's exit code.
+pacman_syu() {
+  local -a base=() line
+  while IFS= read -r line; do
+    if [ -n "$line" ]; then base+=(--overwrite "$line"); fi
+  done <<<"${OVERWRITE_BASE}"
+
+  local log rc=0
+  log="$(mktemp -t pocknix-update.XXXXXX)"
+  # tee, not a plain redirect: the caller has to keep seeing pacman's output live (the QAM
+  # tails /run/pocknix-update.log) AND we need to read back what pacman said if it failed.
+  set +e
+  "$PACMAN" -Syu "${base[@]}" "$@" 2>&1 | tee "$log"
+  rc="${PIPESTATUS[0]}"
+  set -e
+  if [ "$rc" -eq 0 ]; then
+    rm -f "$log"
+    return 0
+  fi
+
+  # Layer 2: only paths pacman itself named, and only the unowned ones. extra holds
+  # "--overwrite <path>" PAIRS, so the counts below are of paths, not arguments.
+  local -a extra=() path
+  local n_unowned=0 n_owned=0
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if "$PACMAN" -Qo "$path" >/dev/null 2>&1; then
+      echo "pocknix-update: ${path} belongs to an installed package - NOT overwriting it."
+      n_owned=$((n_owned + 1))
+    else
+      extra+=(--overwrite "$path")
+      n_unowned=$((n_unowned + 1))
+    fi
+  done < <(grep -oE "${CONFLICT_LINE_RE}" "$log" | sed 's/^[^:]*: //' | sort -u)
+  rm -f "$log"
+
+  if [ "$n_owned" -ne 0 ]; then
+    echo
+    echo "pocknix-update: ${n_owned} of the conflicting paths belong to a real package, so this"
+    echo "is a packaging conflict (two packages want the same file), not a leftover."
+    echo "pocknix-update: not papering over it - please report it with the log above."
+    return "$rc"
+  fi
+
+  # No unowned path in the log at all: not a file conflict (network, signature, hook, disk
+  # space...), so there is nothing this script can safely do. Report pacman's own failure.
+  if [ "$n_unowned" -eq 0 ]; then
+    return "$rc"
+  fi
+
+  echo
+  echo "pocknix-update: ${n_unowned} file(s) here belong to no package, so the update refused"
+  echo "to install over them. They are leftovers from before those paths had a package."
+  echo "pocknix-update: retrying once, replacing ONLY those files."
+  echo
+  set +e
+  "$PACMAN" -Syu "${base[@]}" "${extra[@]}" "$@"
+  rc="$?"
+  set -e
+  return "$rc"
+}
+
+noninteractive=0
+case "${1-}" in
+  --noninteractive) noninteractive=1 ;;
+  "") ;;
+  -h|--help)
+    echo "usage: pocknix-update [--noninteractive]"
+    echo
+    echo "  (no arguments)  interactive, asks before starting (the Plasma entry)"
+    echo "  --noninteractive  same -Syu, no prompts and no progress bar; what the QAM calls"
+    # exit, not return: this case runs at the top level of the script, where return is an error.
+    exit 0
+    ;;
+  *)
+    echo "pocknix-update: unknown option '$1' (try --help)" >&2
+    exit 2
+    ;;
+esac
 
 if [ "$(id -u)" = 0 ]; then
   if ! grep -q '^\[pocknix-base\]' /etc/pacman.conf && [ -e /etc/pocknix/rolling-mode ]; then
@@ -13,7 +167,18 @@ if [ "$(id -u)" = 0 ]; then
     echo "undoes it; 'sudo pocknix-base locked' returns to the supported base."
     echo
   fi
-  exec pacman -Syu
+  rc=0
+  if [ "$noninteractive" = 1 ]; then
+    pacman_syu --noconfirm --noprogressbar || rc=$?
+  else
+    pacman_syu || rc=$?
+  fi
+  exit "$rc"
+fi
+
+if [ "$noninteractive" = 1 ]; then
+  echo "pocknix-update: --noninteractive needs root (the QAM runs it as root)." >&2
+  exit 1
 fi
 
 echo "Pocknix Updater"

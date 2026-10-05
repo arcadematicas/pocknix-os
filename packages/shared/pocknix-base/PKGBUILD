@@ -2,7 +2,13 @@
 # switch and the desktop updater.
 pkgname=pocknix-base
 pkgver=0.2.0
-pkgrel=5
+# 6: pocknix-update stops being a bare `exec pacman -Syu`. It now runs -Syu with a bounded
+#    --overwrite on the paths OUR packages own, and if pacman still reports conflicts it
+#    retries ONCE with --overwrite narrowed to the exact paths pacman named that no
+#    installed package owns. Without this, `pacman -Syu` aborted forever on the leftover
+#    plutovg/plutosvg/libFLAC.so.8/libpcap.so.0.8/Valve-Turnip files pocknix wrote into
+#    fielded devices outside pacman, so a user without a terminal could never update.
+pkgrel=6
 pkgdesc="Locked/rolling base mode switch and desktop updater for pocknix"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"

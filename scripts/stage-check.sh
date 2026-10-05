@@ -7,7 +7,20 @@
 #   rename   every DROP='d name is replaces='d by something still published
 #   version  a swapped package is strictly newer than the live one
 #   shadow   a per-SoC copy of a shared name is not older than [pocknix-shared]
-# POCKNIX_STAGE_CHECK_OFFLINE=1 reuses the last downloaded dbs.
+# POCKNIX_STAGE_CHECK_OFFLINE=1 reuses the last downloaded dbs (handy when the frozen ALARM
+# base lives on a host only reachable over https — see POCKNIX_BASE_RCLONE_REMOTE).
+#
+# POCKNIX_STAGE_CHECK_TEMP_DROP="a b" marks names dropped on PURPOSE as the first half of a
+# two-step release (drop now so a fleet can install the fix, re-publish next stage). Every
+# consequence of such a drop — the name itself, and any dep of a still-published package
+# that now has no provider — is reported as a note instead of a FAIL: those rules catch a
+# drop that was FORGOTTEN, and there is nothing to forget when the next `make stage`
+# re-adds the name. Pass 2 of the release must use it again (and must NOT).
+#
+# POCKNIX_STAGE_CHECK_SOCS="sm8750" walks only those SoCs instead of every kernel/*/ dir.
+# Reach is judged fleet-wide on purpose, but a SoC with no published tree at all has no db,
+# so every judgement for it is made against an empty universe and FAILs on packages that
+# were already live. Skipped SoCs are listed in the output, never silently dropped.
 
 source "$(dirname "$0")/lib.sh"
 for t in bsdtar vercmp rclone; do need_tool "$t"; done
@@ -25,7 +38,24 @@ FAIL() { printf '  %sFAIL%s %s\n' "$_c_red" "$_c_rst" "$*"; fail=1; }
 WARN() { printf '  %swarn%s %s\n' "$_c_yel" "$_c_rst" "$*"; warned=1; }
 note() { printf '  %-10s %s\n' "$1" "$2"; }
 
-mapfile -t ALL_SOCS < <(for d in "${POCKNIX_ROOT}"/kernel/*/; do basename "${d}"; done)
+if [ -n "${POCKNIX_STAGE_CHECK_SOCS-}" ]; then
+  read -ra ALL_SOCS <<< "${POCKNIX_STAGE_CHECK_SOCS}"
+  mapfile -t TREE_SOCS < <(for d in "${POCKNIX_ROOT}"/kernel/*/; do basename "${d}"; done)
+  for s in "${TREE_SOCS[@]}"; do
+    case " ${ALL_SOCS[*]} " in *" ${s} "*) ;; *) note "soc" "${s}: in kernel/ but NOT walked (POCKNIX_STAGE_CHECK_SOCS)" ;; esac
+  done
+else
+  mapfile -t ALL_SOCS < <(for d in "${POCKNIX_ROOT}"/kernel/*/; do basename "${d}"; done)
+fi
+
+# a name the operator declared as dropped on purpose for a two-step release
+es_temp_drop() {  # $1 = dep name -> 0 if declared
+  local t
+  for t in ${POCKNIX_STAGE_CHECK_TEMP_DROP-}; do
+    if [ "${t}" = "$1" ]; then return 0; fi
+  done
+  return 1
+}
 
 # --- metadata -> flat facts --------------------------------------------------
 # P repo name ver | D depspec | V provides | R replaces | C conflicts | O optdep;
@@ -199,7 +229,13 @@ check_resolve() {  # $1 soc
   for n in "${!staged[@]}"; do
     while IFS= read -r spec; do
       [ -n "${spec}" ] || continue
-      satisfier "${spec}" || FAIL "${n}: depends on '${spec}' — nothing in ${UNIVERSE// /, } provides it"
+      if ! satisfier "${spec}"; then
+        if es_temp_drop "${spec%%[<>=]*}"; then
+          note "tempdrop" "${n}: depends on '${spec}' — dropped on purpose, back in the next stage"
+        else
+          FAIL "${n}: depends on '${spec}' — nothing in ${UNIVERSE// /, } provides it"
+        fi
+      fi
     done <<< "${deps["${n}@stage"]:-}"
   done
 }
@@ -220,8 +256,13 @@ check_reach() {  # $1 soc: BFS over depends + optdepends from the roots
         [ -n "${spec}" ] || continue
         if ! satisfier "${spec}"; then
           # a hard dep nothing provides = a member a failed build never published; base internals are ALARM's
-          [ "${kind}" = D ] && [ "${k#*@}" != base ] && \
-            FAIL "$1: ${k%@*} (${k#*@}) depends on '${spec}' — nothing in ${UNIVERSE// /, } provides it"
+          if [ "${kind}" = D ] && [ "$k#*@" != base ]; then
+            if es_temp_drop "${spec%%[<>=]*}"; then
+              note "tempdrop" "$1: ${k%@*} (${k#*@}) depends on '${spec}' — dropped on purpose"
+            else
+              FAIL "$1: ${k%@*} (${k#*@}) depends on '${spec}' — nothing in ${UNIVERSE// /, } provides it"
+            fi
+          fi
           continue
         fi
         n="${SAT%@*}"
@@ -293,6 +334,16 @@ if [ -f "${MARKER}" ]; then
   done
   for n in "${!dropped[@]}"; do
     [ -n "${added["${n}"]+x}" ] && continue
+    # no `local` here: this loop runs at the script's top level, where local is an error
+    if es_temp_drop "${n}"; then
+      # declared two-step drop: pass 2 must re-add this name, so there is no orphan to report
+      if [ -n "${ver["${n}@shared"]+x}" ] || [ -n "${ver["${n}@${SOC}"]+x}" ]; then
+        note "tempdrop" "${n}: dropped on purpose (two-step release); still LIVE in its repo, re-add it next stage"
+      else
+        FAIL "${n}: declared a temporary drop but it is NOT live anywhere — nothing to re-add later"
+      fi
+      continue
+    fi
     who=""; has_conflict=0
     for k in "${!repl[@]}"; do
       while IFS= read -r spec; do
