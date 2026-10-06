@@ -1,4 +1,19 @@
 #!/bin/bash
+# --- PATH de emergencia (Alfred, 02/10/2026) ---------------------------
+# Cuando ES-DE se lanza DESDE STEAM, Steam le deja PATH=/tmp/.pathNNNN, una
+# carpeta que solo contiene un enlace a fusermount (la prepara para poder montar
+# el AppImage dentro de su entorno). Con ese PATH este script no encuentra
+# readlink/dirname/find/tr/... y el emulador NO arranca: ES-DE dice que ha
+# lanzado el juego y no da ningun error, y el emulador ni llega a escribir su
+# log. Se ve en el journal como "readlink: command not found".
+#
+# Se pone delante el PATH normal y se conserva el de Steam AL FINAL, porque si
+# hace falta: es el que trae fusermount para montar los AppImage.
+#
+# Diagnostico completo: docs/DECKSTATION-ESDE-NO-LANZA-JUEGOS.md
+PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+export PATH
+
 # lanzar.sh — Wrapper portable universal para DeckStation (ARM)
 # Redirige HOME al .home del AppImage para que todo quede portable.
 #
@@ -87,6 +102,15 @@ if [ -n "$WAYLAND_DISPLAY" ] && [ -z "$SDL_VIDEODRIVER" ]; then
   export SDL_VIDEODRIVER=wayland
 elif [ -n "$DISPLAY" ] && [ -z "$SDL_VIDEODRIVER" ]; then
   export SDL_VIDEODRIVER=x11
+fi
+
+# 4b. UI de ESCRITORIO: Plasma Mobile no tiene gestor de ventanas, asi que un
+#     dialogo mas grande que la pantalla no se puede arrastrar (le pasa a los
+#     ajustes de Azahar, Cemu y compania). Se escala la interfaz hacia abajo SOLO
+#     en esa sesion, para no tocar el modo juego.
+if [ -n "${QT_QUICK_CONTROLS_MOBILE:-}" ] || pgrep -f startplasmamobile >/dev/null 2>&1; then
+  export QT_SCALE_FACTOR="${QT_SCALE_FACTOR:-0.8}"
+  export QT_AUTO_SCREEN_SCALE_FACTOR="${QT_AUTO_SCREEN_SCALE_FACTOR:-0}"
 fi
 
 # 5. Lanzamos

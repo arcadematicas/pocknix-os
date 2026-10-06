@@ -231,10 +231,23 @@ setup_retroarch_assets() {
 
 # Cores instalados como paquetes del sistema (p. ej. suyu-libretro) ->
 # carpeta portable de cores, para que ES-DE/RetroArch los vean.
+# Cores que NADIE publica compilados (azahar, bsnes-hd) + el set completo de
+# ArkOS/buildbot: se DESCARGAN a la carpeta portable de RetroArch, dentro de
+# DeckStation. Asi DeckStation es autonomo del sistema operativo del cliente y
+# una instalacion limpia acaba con TODOS los cores dentro de su propia carpeta.
+# Va DESPUES de que el Updater haya instalado RetroArch y ANTES de
+# deploy_cores_sync (que poda ES-DE segun lo que haya en la carpeta portable).
+fetch_extra_cores() {
+    if [ -x "${SCRIPTS_DIR}/deckstation-cores-fetch.sh" ]; then
+        log "Descargando a DeckStation los cores que falten..."
+        "${SCRIPTS_DIR}/deckstation-cores-fetch.sh" || log_warn "Fallo al descargar los cores de DeckStation"
+    fi
+}
+
 deploy_system_cores() {
     if [ -x "${SCRIPTS_DIR}/deckstation-cores.sh" ]; then
-        log "Enlazando cores del sistema a la carpeta portable..."
-        "${SCRIPTS_DIR}/deckstation-cores.sh" || log_warn "Fallo al enlazar los cores del sistema"
+        log "Copiando cores del sistema a la carpeta portable..."
+        "${SCRIPTS_DIR}/deckstation-cores.sh" || log_warn "Fallo al copiar los cores del sistema"
     fi
 }
 
@@ -246,6 +259,19 @@ deploy_cores_sync() {
     if [ -x "${SCRIPTS_DIR}/deckstation-cores-sync.sh" ]; then
         log "Filtrando en ES-DE los cores no instalados..."
         "${SCRIPTS_DIR}/deckstation-cores-sync.sh" || log_warn "Fallo al filtrar los cores de ES-DE"
+    fi
+}
+
+# ES-DE: dejar solo los EMULADORES realmente instalados (Citra, Cemu,
+# PPSSPP, Xenia...). Quita del es_systems.xml activo los <command> cuyo
+# %EMULATOR_X% no resuelve a ninguna ruta de es_find_rules.xml, que antes se
+# ofrecian y al elegirlos no pasaba nada. Filtra el ACTIVO (no lo regenera
+# desde el source), asi que VA DESPUES de deploy_cores_sync: si fuera antes,
+# el de cores volvería a poner los comandos con cores que faltan.
+deploy_emulators_sync() {
+    if [ -x "${SCRIPTS_DIR}/deckstation-emulators-sync.sh" ]; then
+        log "Filtrando en ES-DE los emuladores no instalados..."
+        "${SCRIPTS_DIR}/deckstation-emulators-sync.sh" || log_warn "Fallo al filtrar los emuladores de ES-DE"
     fi
 }
 
@@ -291,9 +317,9 @@ deploy_lanzar_sh() {
 # Bajarlo de la fuente oficial evita depender de un binario que no esta publicado
 # en ningun sitio (el repo de DeckStation no tiene releases): sin este paso, una
 # instalacion limpia se queda SIN front-end y `deckstation` no arranca.
-ESDE_VERSION="${ESDE_VERSION:-3.4.1}"
-ESDE_URL="${ESDE_URL:-https://gitlab.com/es-de/emulationstation-de/-/package_files/326321114/download}"
-ESDE_MD5="${ESDE_MD5:-9e459692ebd86dc5f0524f4c2bbad3b3}"
+ESDE_VERSION="${ESDE_VERSION:-3.5.0}"
+ESDE_URL="${ESDE_URL:-https://gitlab.com/es-de/emulationstation-de/-/package_files/357718204/download}"
+ESDE_MD5="${ESDE_MD5:-540f1aa13c34779a48cc66fc56df0966}"
 
 setup_esde() {
     local destino="${DECKSTATION_ROOT}/DeckStation.AppImage"
@@ -505,10 +531,21 @@ main() {
     # descargue nada. Se repite aqui, ya con RetroArch en su sitio.
     setup_retroarch_assets
 
+    # Cores: descargar a DeckStation los que no vengan del sistema (incluidos
+    # los que nadie publica compilados). Es lo que hace que al instalar
+    # DeckStation desde Pocknix Tools queden TODOS los cores dentro de la
+    # carpeta portable, sin depender del SO.
+    fetch_extra_cores
+
     # ES-DE: quitar del selector los cores que no estan instalados. Va al final,
     # con RetroArch ya instalado y las configs desplegadas (es cuando el
     # es_systems.xml activo existe y la carpeta de cores tiene su contenido).
     deploy_cores_sync
+
+    # ES-DE: quitar del selector los EMULADORES que no estan instalados (Citra,
+    # Cemu, PPSSPP...). Despues del de cores y por el mismo motivo: ambos
+    # podan el mismo fichero activo y el que va ultimo manda.
+    deploy_emulators_sync
 
     # Transparente: añadir DeckStation a Steam con sus imágenes, sin preguntar.
     # Solo funciona desde el modo Escritorio; si no, avisa y sigue.

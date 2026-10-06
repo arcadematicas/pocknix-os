@@ -198,7 +198,7 @@ first_copy() {  # $1 name -> FC="name@repo" of the copy pacman would install
 # --- delta (from the staging marker) -----------------------------------------
 pkgbase() { local b="${1##*/}"; b="${b%-*}"; b="${b%-*}"; b="${b%-*}"; printf '%s' "${b}"; }
 pkgver_of() { local b="${1##*/}"; b="${b%-*}"; b="${b#"$(pkgbase "$1")-"}"; printf '%s' "${b}"; }
-declare -A added dropped   # name -> version (as staged / as was live)
+declare -A added=() dropped=()   # inicializados: con set -u, contar un array sin inicializar falla
 if [ -f "${MARKER}" ]; then
   while IFS= read -r l; do
     f="${l#[+-]}"; [ -n "${f}" ] && [ "${f}" != "${l}" ] || continue
