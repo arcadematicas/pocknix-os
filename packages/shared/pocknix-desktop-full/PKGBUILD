@@ -3,7 +3,7 @@
 # Build with ./nodeps: makepkg -s would drag the whole KDE/Qt stack in to lay out nothing.
 pkgname=pocknix-desktop-full
 pkgver=0.1.0
-pkgrel=2
+pkgrel=3
 pkgdesc="pocknix optional layer: Plasma Mobile desktop session, KDE apps, Waydroid, Flatpak"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -34,7 +34,9 @@ depends=('pocknix-desktop'
          'discover'
          'bluedevil'
          'kdialog'           # the internal installer's GUI dialogs
-         'qt6-tools')        # qdbus6 drives the kdialog progress dialog
+         'qt6-tools'        # qdbus6 drives the kdialog progress dialog
+         'pocknix-gamepad-calibration'  # calibracion de mando en modo desktop (cubre python-pyxel)
+         'pocknix-wsquashfs')           # menus de Dolphin/KDE (capa desktop)
 
 package() {
   :

@@ -3,7 +3,7 @@
 # are optdepends instead, so a failed optional build cannot block the layer.
 pkgname=pocknix-emulation-full
 pkgver=0.1.0
-pkgrel=3
+pkgrel=5
 pkgdesc="pocknix optional layer: ES-DE frontend, RetroArch cores, standalone emulators (Switch: bring your own)"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -17,13 +17,18 @@ depends=('pocknix-emulation'
          'retroarch-shaders-pocknix'
          'ppsspp'
          'fuse2'
-         'armsx2-bin'
-         'rpcs3-bin'
-         'xemu-bin'
-         'vita3k-bin')
+         'suyu-libretro'     # emulador de Switch via libretro (tambien instalado directo en la imagen)
+         'deckstation-arm')  # ES-DE portable de DeckStation
+# armsx2/rpcs3/xemu/vita3k son "bring your own": sus fuentes no estan en el repo y varios
+# no compilan bajo qemu (ver el guard POCKNIX_EMULATION_PKGS en build-packages.sh), asi que
+# NUNCA pueden ir en depends de un metapaquete publicado — optdepends, como dolphin/azahar/cemu.
 optdepends=('dolphin-emu: GameCube/Wii'
             'azahar: 3DS'
-            'cemu: Wii U')
+            'cemu: Wii U'
+            'armsx2-bin: emulador de Amiga (bring your own)'
+            'rpcs3-bin: emulador de PS3 (bring your own)'
+            'xemu-bin: emulador de Xbox (bring your own)'
+            'vita3k-bin: emulador de PS Vita (bring your own)')
 
 package() {
   :   # pure metapackage
