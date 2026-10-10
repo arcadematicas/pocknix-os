@@ -43,9 +43,6 @@ Include = /etc/pacman.d/mirrorlist
 
 [alarm]
 Include = /etc/pacman.d/mirrorlist
-
-[aur]
-Include = /etc/pacman.d/mirrorlist
 EOF
   fi
 }
