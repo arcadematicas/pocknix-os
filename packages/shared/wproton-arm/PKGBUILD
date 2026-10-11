@@ -3,7 +3,7 @@
 # Proyecto independiente de stshunz. Repo: https://github.com/stshunz/WProton_ARM
 pkgname=wproton-arm
 pkgver=1.0.0
-pkgrel=1
+pkgrel=2
 pkgdesc="WProton: lanzador portable de juegos Windows (.wsquashfs) con Proton/Wine en ARM64"
 arch=('aarch64')
 url="https://github.com/stshunz/WProton_ARM"
