@@ -3,9 +3,9 @@
 # GUEST thunks cross-compile with plain clang against a sysroot assembled from pinned
 # Arch x86_64 + lib32 packages, so the build stays inside the `make packages` chroot.
 pkgname=fex-emu
-_commit=e869aa644a16e4332cdc15c1ea0b4d13d482385d
-pkgver=2608.20260804.e869aa64
-pkgrel=3
+_commit=14c92681f4d62cf84d901460e0358de09c8847a7
+pkgver=2610.20261007.14c92681
+pkgrel=1
 pkgdesc="Fast usermode x86/x86-64 emulator for AArch64, built with host+guest thunks"
 arch=('aarch64')
 url="https://github.com/FEX-Emu/FEX"
