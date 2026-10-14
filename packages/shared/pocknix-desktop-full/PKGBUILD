@@ -7,16 +7,9 @@ pkgrel=3
 pkgdesc="pocknix optional layer: Plasma Mobile desktop session, KDE apps, Waydroid, Flatpak"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
-license=('GPL2')
+license=('GPL-2.0-or-later')
 depends=('pocknix-desktop'
-         'plasma-mobile'
-         'plasma-workspace'
-         'kwin'
-         'plasma-nano'
-         'plasma-nm'
-         'powerdevil'
-         'plasma-settings'
-         'kscreen'           # kscreen-doctor drives the rotated-DSI transform
+         'pocknix-desktop-plasma-mobile'   # the default flavour, named so no provider prompt
          'xdg-user-dirs'
          'konsole'
          'kate'
@@ -32,11 +25,8 @@ depends=('pocknix-desktop'
          'waydroid'          # needs the kernel's binder/binderfs (build-kernel.sh)
          'flatpak'
          'discover'
-         'bluedevil'
          'kdialog'           # the internal installer's GUI dialogs
-         'qt6-tools'        # qdbus6 drives the kdialog progress dialog
-         'pocknix-gamepad-calibration'  # calibracion de mando en modo desktop (cubre python-pyxel)
-         'pocknix-wsquashfs')           # menus de Dolphin/KDE (capa desktop)
+         'qt6-tools')        # qdbus6 drives the kdialog progress dialog
 
 package() {
   :

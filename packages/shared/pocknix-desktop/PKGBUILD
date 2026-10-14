@@ -1,78 +1,41 @@
-# pocknix-desktop — the Plasma Mobile desktop session plus the game<->desktop session switch.
-# depends() stays 'bash': the Plasma Mobile stack ships via the pocknix-desktop-full metapackage
-# so makepkg -s does not drag all of KDE/Qt into the build chroot for this arch=any data package.
+# DE-neutral half of the desktop layer; the DE itself comes from a pocknix-desktop-flavour
+# provider. Build with ./nodeps: the flavour dep would drag a whole DE into the chroot.
 pkgname=pocknix-desktop
 pkgver=0.1.0
-pkgrel=26
-pkgdesc="Plasma Mobile desktop session for the RP6 + game<->desktop session switch"
+pkgrel=31
+pkgdesc="pocknix desktop session launcher, Flathub seeding and flatpak fixes"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
-license=('GPL2')
-depends=('bash')
+license=('GPL-2.0-or-later')
+# pocknix-desktop-full: the same pre-meta catch-up cycle as pocknix-steam -> pocknix-steam-full.
+# >= -2: steamos-session-select moved there from -26, so the file never goes missing mid-upgrade.
+depends=('bash' 'pocknix-session>=0.1.0-2' 'pocknix-desktop-flavour'
+         'pocknix-bsp-common>=0.1.0-22'  # owns the SDL d-pad fix the launcher used to export
+         'pocknix-desktop-full')
+optdepends=('pocknix-desktop-plasma-mobile: Plasma Mobile flavour (default)'
+            'pocknix-desktop-plasma: desktop Plasma flavour')
 install='pocknix-desktop.install'
-source=('pocknix-desktop' 'pocknix-desktop-rotate' 'pocknix-desktop-rotate.desktop'
-        'pocknix-desktop-env' 'pocknix-desktop-env.desktop'
-        'pocknix-desktop-remove-taskpanel' 'pocknix-desktop-remove-taskpanel.desktop'
-        'steamos-session-select' 'return-to-gamemode.desktop'
+source=('pocknix-desktop' 'pocknix-desktop-select' 'return-to-gamemode.desktop'
         'pocknix-flathub-setup' 'pocknix-flathub.service' 'pocknix-flathub-dispatcher'
-        'ksplashrc' 'pocknix-x11.conf'
-        'powerdevilrc' 'kscreenlockerrc'
-        'pocknix-fontcache-prune' '99-pocknix-fontcache.hook'
-        'pocknix-panel-touchfix' '98-pocknix-panel-touchfix.hook'
-        'pocknix-places' 'pocknix-places.desktop')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP'
-            'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'pocknix-x11.conf'
+        'pocknix-fontcache-prune' '99-pocknix-fontcache.hook')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -Dm755 "${srcdir}/pocknix-desktop"          "${pkgdir}/usr/bin/pocknix-desktop"
-  install -Dm755 "${srcdir}/pocknix-desktop-rotate"   "${pkgdir}/usr/bin/pocknix-desktop-rotate"
-  install -Dm755 "${srcdir}/steamos-session-select"   "${pkgdir}/usr/bin/steamos-session-select"
-  # Autostart the rotation transform once the Plasma session (and kscreen kded) is up.
-  install -Dm644 "${srcdir}/pocknix-desktop-rotate.desktop" \
-    "${pkgdir}/etc/xdg/autostart/pocknix-desktop-rotate.desktop"
-  # Import Wayland/X11 session vars into systemd --user and D-Bus activation env (phase 1,
-  # before kscreen-doctor and other D-Bus-activated services try to start).
-  install -Dm755 "${srcdir}/pocknix-desktop-env"          "${pkgdir}/usr/bin/pocknix-desktop-env"
-  install -Dm644 "${srcdir}/pocknix-desktop-env.desktop"  \
-    "${pkgdir}/etc/xdg/autostart/pocknix-desktop-env.desktop"
-
-  # Marcadores de Dolphin para DeckStation y WProton (viven en /opt, fuera del home)
-  install -Dm755 "${srcdir}/pocknix-places"               "${pkgdir}/usr/bin/pocknix-places"
-  install -Dm644 "${srcdir}/pocknix-places.desktop"       \
-    "${pkgdir}/etc/xdg/autostart/pocknix-places.desktop"
-  # Remove the leftover gesture-bar taskpanel every session (see the script header for why).
-  install -Dm755 "${srcdir}/pocknix-desktop-remove-taskpanel" \
-    "${pkgdir}/usr/bin/pocknix-desktop-remove-taskpanel"
-  install -Dm644 "${srcdir}/pocknix-desktop-remove-taskpanel.desktop" \
-    "${pkgdir}/etc/xdg/autostart/pocknix-desktop-remove-taskpanel.desktop"
-  # "Return to Game Mode" tile in the Plasma app grid.
+  install -Dm755 "${srcdir}/pocknix-desktop-select"   "${pkgdir}/usr/bin/pocknix-desktop-select"
   install -Dm644 "${srcdir}/return-to-gamemode.desktop" \
     "${pkgdir}/usr/share/applications/return-to-gamemode.desktop"
-  # Flathub remote setup for Discover/flatpak. NOT enabled at boot: the service is started by the
-  # NetworkManager dispatcher hook when a connection comes up (see the unit + dispatcher headers).
+  # Not enabled: the NM dispatcher starts it once a link is up.
   install -Dm755 "${srcdir}/pocknix-flathub-setup"    "${pkgdir}/usr/bin/pocknix-flathub-setup"
   install -Dm644 "${srcdir}/pocknix-flathub.service" \
     "${pkgdir}/usr/lib/systemd/system/pocknix-flathub.service"
   # Dispatcher scripts must be root-owned and not group/world writable or NM refuses to run them.
   install -Dm755 "${srcdir}/pocknix-flathub-dispatcher" \
     "${pkgdir}/etc/NetworkManager/dispatcher.d/50-pocknix-flathub"
-  # Disable the 30s KSplash fallback (Plasma Mobile never dismisses it) so a session switch isn't
-  # stuck behind a splash. System-wide default; only the deck Plasma session reads it.
-  install -Dm644 "${srcdir}/ksplashrc"                "${pkgdir}/etc/xdg/ksplashrc"
-  # power button -> NoAction in powerdevil: Plasma Mobile's ToggleScreenOnOff default turned
-  # the panel back OFF on the (post-resume-delivered) wake press. pocknix-powerd owns the key.
-  install -Dm644 "${srcdir}/powerdevilrc"             "${pkgdir}/etc/xdg/powerdevilrc"
-  # No PIN lock screen: disable kscreenlocker's idle autolock + lock-on-resume (see file header).
-  install -Dm644 "${srcdir}/kscreenlockerrc"          "${pkgdir}/etc/xdg/kscreenlockerrc"
-  # tmpfiles rule to create /tmp/.X11-unix at boot so kwin can start XWayland (X11 apps like Steam
-  # in desktop mode). kwin expects the dir to exist; the minimal ALARM base ships no xorg-server
-  # to provide it. See pocknix-x11.conf.
+  # No xorg-server in the base to create /tmp/.X11-unix for XWayland.
   install -Dm644 "${srcdir}/pocknix-x11.conf"         "${pkgdir}/usr/lib/tmpfiles.d/pocknix-x11.conf"
   install -Dm755 "${srcdir}/pocknix-fontcache-prune" "${pkgdir}/usr/bin/pocknix-fontcache-prune"
   install -Dm644 "${srcdir}/99-pocknix-fontcache.hook" \
     "${pkgdir}/usr/share/libalpm/hooks/99-pocknix-fontcache.hook"
-  # Touch-through fix for the auto-hidden status bar (rationale in the script header).
-  install -Dm755 "${srcdir}/pocknix-panel-touchfix" "${pkgdir}/usr/bin/pocknix-panel-touchfix"
-  install -Dm644 "${srcdir}/98-pocknix-panel-touchfix.hook" \
-    "${pkgdir}/usr/share/libalpm/hooks/98-pocknix-panel-touchfix.hook"
 }
