@@ -4,11 +4,11 @@
 # pre-snapshot ext4 installs).
 pkgname=pocknix-snapshots
 pkgver=0.1.0
-pkgrel=4
+pkgrel=6
 pkgdesc="pocknix pre-update btrfs snapshots and rollback (subvolume set-default)"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
-license=('GPL2')
+license=('GPL-2.0-or-later')
 depends=('btrfs-progs' 'jq' 'util-linux')
 backup=('etc/pocknix/snapshots.conf')
 source=('05-pocknix-snapshot.hook' '99-pocknix-snapshot-post.hook'

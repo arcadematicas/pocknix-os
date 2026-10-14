@@ -1,7 +1,7 @@
 #!/bin/bash
 # pocknix-tools - kdialog front-end for the maintenance CLIs. Every privileged step is a
 # pkexec of a program whose own package ships its polkit rule; never pkexec anything else
-# (the session has no polkit agent, see dev/desktop.md).
+# (the session has no polkit agent).
 set -euo pipefail
 
 TITLE="Pocknix Tools"
@@ -192,6 +192,60 @@ do_defaults() {
   kdialog --title "$TITLE" --msgbox "Default settings restored for ${choice}." || true
 }
 
+# rows: <name> TAB <label> TAB active|""; empty when pocknix-desktop is not installed
+desktops() { pocknix-desktop-select list 2>/dev/null || true; }
+desktop_active_label() { desktops | awk -F'\t' '$3 == "active" { print $2 }'; }
+
+do_desktop() {
+  local args=() name label flag active="" choice
+  declare -A labels
+  while IFS=$'\t' read -r name label flag; do
+    labels["${name}"]="${label}"
+    [ "${flag}" = active ] && active="${name}"
+    args+=("${name}" "${label}" "$([ "${flag}" = active ] && echo on || echo off)")
+  done <<< "$(desktops)"
+  choice="$(kdialog --title "$TITLE" --radiolist "Desktop to use in desktop mode:" "${args[@]}")" || return 0
+  [ -n "${choice}" ] && [ "${choice}" != "${active}" ] || return 0
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Switch to ${labels[${choice}]} now?\n\nThis logs out of the current desktop, so open apps close: save your work first. Desktop mode then always starts ${labels[${choice}]}." \
+    || return 0
+  pocknix-desktop-select "${choice}" --now || gui_err "Could not switch to ${labels[${choice}]}."
+}
+
+plasma_installed() { [ "$(pocknix-layer status desktop-plasma 2>/dev/null | sed -n 's/^installed=//p')" = yes ]; }
+
+do_plasma() {
+  if plasma_installed; then
+    # Removing the shell this session runs on leaves kwin with nothing to show.
+    if [ "${DESKTOP_SESSION:-}" = plasma ]; then
+      kdialog --title "$TITLE" --sorry "Desktop Plasma is the desktop you are using right now.\n\nSwitch to Plasma Mobile first (Desktop: ... - change), then remove it from there." || true
+      return 0
+    fi
+    kdialog --title "$TITLE" --warningcontinuecancel \
+      "Remove desktop Plasma?\n\nPlasma Mobile stays as the desktop. Your desktop Plasma settings are kept, so installing it again brings them back." \
+      || return 0
+    konsole_run "/usr/bin/pocknix-layer remove desktop-plasma"
+    plasma_installed && { gui_err "Desktop Plasma is still installed. The terminal output says what went wrong."; return 0; }
+    kdialog --title "$TITLE" --msgbox "Desktop Plasma is removed." || true
+    return 0
+  fi
+  kdialog --title "$TITLE" --warningcontinuecancel \
+    "Install desktop Plasma (preview)?\n\nThe regular KDE desktop with a taskbar, as a second choice next to Plasma Mobile. It is a preview until the next Pocknix release puts all of Plasma on one version.\n\nThis runs a full system update first." \
+    || return 0
+  konsole_run "/usr/bin/pocknix-layer install desktop-plasma"
+  plasma_installed || { gui_err "Desktop Plasma is still not installed. The terminal output says what went wrong."; return 0; }
+  # Outside a desktop session there is nothing to log out of: just make it the pick.
+  if [ -z "${DESKTOP_SESSION:-}" ]; then
+    pocknix-desktop-select plasma || true
+    kdialog --title "$TITLE" --msgbox "Desktop Plasma is installed. Desktop mode starts it from now on." || true
+    return 0
+  fi
+  kdialog --title "$TITLE" --yesno \
+    "Desktop Plasma is installed.\n\nSwitch to it now? This logs out of the current desktop, so open apps close: save your work first." \
+    || { kdialog --title "$TITLE" --msgbox "You can switch any time with Desktop: ... - change." || true; return 0; }
+  pocknix-desktop-select plasma --now || gui_err "Could not switch to desktop Plasma."
+}
+
 # terminal on purpose: pocknix-base demands a typed ROLL and streams the pacman run
 konsole_run() { konsole -e /bin/bash -c "pkexec $1; echo; read -rp 'Press Enter to close... '"; }
 
@@ -225,66 +279,6 @@ do_status() {
   kdialog --title "$TITLE" --msgbox "<html>${status}<pre>${list}</pre></html>" || true
 }
 
-# DeckStation (stshunz's portable emulation system, ES-DE) downloads its ARM64
-# emulator AppImages on demand — never at boot, so a fresh image stays light and
-# boots fast. Runs as deck (NOT pkexec): DeckStation lives in /opt/deckstation
-# (deck-owned) and writes its saves/logs there, so root ownership would break it.
-do_deckstation() {
-  local setup="/opt/deckstation/scripts/deckstation-setup.sh"
-  if [ ! -x "${setup}" ]; then
-    gui_err "DeckStation setup not found (${setup}).\n\nIs the deckstation-arm package installed?"
-    return 0
-  fi
-  kdialog --title "$TITLE" --warningcontinuecancel \
-    "Install DeckStation?\n\nDeckStation is a portable emulation system (ES-DE). This installs the FULL base: the 30 ARM64 emulator AppImages (~1.5 GB) into /opt/deckstation/Apps, the portable launchers, the base configs, the RetroArch menu assets and your BIOS if you put them in bios/.\n\nNeeds a network connection and can take a while. Safe to re-run: what is already there is skipped.\n\nAfterwards, use ES-DE -> Updater to update or add emulators one by one." \
-    || return 0
-  konsole -e /bin/bash -c "${setup}; echo; read -rp 'Press Enter to close... '"
-  # WProton es la otra mitad de la capa de emulacion (juegos de Windows). Su
-  # asistente de primera puesta en marcha es interactivo, asi que se OFRECE.
-  do_wproton
-}
-
-# WProton (Windows games: Proton/Wine). Su primer arranque lanza un asistente que
-# elige el runner, la config basica y lo anade al modo juego de Steam.
-# (DeckStation BIOS ya no está aquí: el Updater de DeckStation tiene su propia
-# opción "BIOS / Firmware" — era redundante.)
-
-do_wproton() {
-  local wp="/usr/bin/wproton"
-  if [ ! -x "${wp}" ]; then
-    return 0   # WProton no instalado: nada que hacer
-  fi
-  kdialog --title "$TITLE" --yesno \
-    "Set up WProton too?\n\nWProton runs Windows games (Proton/Wine). Its first-run wizard picks the runner and the basic settings, and adds WProton to Steam's Game Mode.\n\nRun the wizard now? (You can also run it later from this menu.)" \
-    || return 0
-  konsole -e /bin/bash -c "${wp}; echo; read -rp 'Press Enter to close... '"
-}
-
-# MAKO Decky (Lossless Scaling frame generation) reads Lossless.dll at runtime from a
-# *lawful, user-supplied* Lossless Scaling install. MAKO never ships the DLL and neither
-# do we: it is paid, proprietary software, so it must NOT go into a public repo. This
-# option only places the user's OWN copy where MAKO looks for it:
-#   ~/.local/share/Steam/steamapps/common/Lossless Scaling/Lossless.dll
-# Runs as deck (NOT pkexec): it writes into deck's Steam library.
-# NOTE: MAKO still disables Renderer installation on native AArch64 hosts (Odin 3) until
-# an AArch64 Renderer ships, so the DLL is required but not sufficient there.
-do_mako_dll() {
-  local dest_dir="${HOME}/.local/share/Steam/steamapps/common/Lossless Scaling"
-  local dest="${dest_dir}/Lossless.dll"
-  local src
-  src="$(kdialog --title "$TITLE" --getopenfilename "${HOME}/Recibidos" '*.dll')" || return 0
-  if [ -z "${src}" ] || [ ! -f "${src}" ]; then
-    gui_err "No Lossless.dll selected."
-    return 0
-  fi
-  mkdir -p "${dest_dir}" || { gui_err "Could not create:\n${dest_dir}"; return 0; }
-  if cp -f "${src}" "${dest}"; then
-    kdialog --title "$TITLE" --msgbox "Installed Lossless.dll to:\n${dest}\n\nMAKO Decky will find it here. Restart Decky/Steam if they were running."
-  else
-    gui_err "Could not copy the DLL to:\n${dest}"
-  fi
-}
-
 while :; do
   mode="$(base_mode)"
   # a missed tap returns the FIRST row: keep the read-only item there
@@ -296,9 +290,6 @@ while :; do
     rolling) items+=(mode "Return to locked mode (recommended)...") ;;
   esac
   items+=(installer "Install or remove internal Pocknix...")
-  items+=(deckstation "Install DeckStation (emulators)...")
-  items+=(wproton "Set up WProton (Windows games)...")
-  items+=(mako-dll "Install Lossless Scaling DLL (MAKO)...")
   abl_label="$(abl_item_label "$(abl_status)")" && items+=(abl "${abl_label}")
   if [ "$(ssh_state)" = on ]; then items+=(ssh "Remote access (SSH) is ON - turn it off")
   else items+=(ssh "Remote access (SSH) is off - turn it on..."); fi
@@ -307,20 +298,24 @@ while :; do
   if layer_installed; then items+=(emulation "Emulation layer is installed - remove it...")
   else items+=(emulation "Install the emulation layer (ES-DE + emulators)..."); fi
   [ -n "$(emulators_present)" ] && items+=(defaults "Restore emulator default settings...")
+  if [ -n "$(desktops)" ]; then
+    if plasma_installed; then items+=(plasma "Desktop Plasma (preview) is installed - remove it...")
+    else items+=(plasma "Install desktop Plasma (preview)..."); fi
+  fi
+  [ "$(desktops | wc -l)" -ge 2 ] && items+=(desktop "Desktop: $(desktop_active_label) - change...")
   choice="$(kdialog --title "$TITLE" --menu "Pocknix maintenance tools\nMode: ${mode^^}" "${items[@]}")" || exit 0
   case "${choice}" in
     rollback)          do_rollback "" ;;
     rollback-internal) do_rollback --internal ;;
     mode)              do_mode ;;
     installer)         /usr/bin/pocknix-installer-gui || true ;;
-    deckstation)       do_deckstation ;;
-    wproton)           do_wproton ;;
-    mako-dll)          do_mako_dll ;;
     abl)               do_abl ;;
     ssh)               do_ssh ;;
     share)             do_share ;;
     emulation)         do_layer ;;
     defaults)          do_defaults ;;
+    desktop)           do_desktop ;;
+    plasma)            do_plasma ;;
     status)            do_status ;;
     *) exit 0 ;;
   esac
