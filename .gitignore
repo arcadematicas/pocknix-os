@@ -41,3 +41,4 @@ __pycache__/
 
 # 105 MB boot animation: kept out of git (see pocknix-odin3-support docs)
 /overlay/bootanimation-odin3.zip
+packages/shared/pocknix-system-overlay/rootfs/bootanimation-odin3.zip
