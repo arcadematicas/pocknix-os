@@ -103,6 +103,14 @@ chroot_mount() {
   mount -t proc  proc    "${root}/proc"
   mount -t sysfs sys     "${root}/sys"
   mount -t tmpfs tmpfs   "${root}/run"
+  # makepkg usa process substitution (<(...)) y necesita /dev/fd -> /proc/self/fd. El bind de
+  # /dev del host normalmente lo aporta, pero si el chroot se toca a mano (o el host no lo
+  # tiene) TODO build muere con "/dev/fd/63: No such file or directory" y el make solo dice
+  # "Error 2" sin mas. Visto en la Odin 16/10/2026. Crearlos es idempotente e inocuo.
+  ln -sfn /proc/self/fd   "${root}/dev/fd"     2>/dev/null || true
+  ln -sfn /proc/self/fd/0 "${root}/dev/stdin"  2>/dev/null || true
+  ln -sfn /proc/self/fd/1 "${root}/dev/stdout" 2>/dev/null || true
+  ln -sfn /proc/self/fd/2 "${root}/dev/stderr" 2>/dev/null || true
   chroot_resolv "${root}"
 }
 
