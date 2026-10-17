@@ -33,9 +33,14 @@ if [ -z "${DISPLAY:-}" ]; then
   [ -n "${DISPLAY:-}" ] || echo "steam: WARNING no XWayland socket in /tmp/.X11-unix — is the Plasma session up + kwin's XWayland running?" >&2
 fi
 
-# Re-pin here too: a desktop-mode `steam` otherwise flips package/beta to steamdeck_stable and
-# breaks the next game-mode launch. See pocknix-steam.
-mkdir -p "${STEAM}/package"
-echo steamdeck_publicbeta > "${STEAM}/package/beta"
+# El canal es preferencia del usuario (upstream 7a69f8cb): la semilla es steamdeck_publicbeta,
+# pero se respeta steamdeck_stable (Valve ya publica cliente linuxarm64 para stable). Antes se
+# re-pineaba aqui y cambiar a Stable DESDE EL ESCRITORIO se revertia al arrancar.
+. /usr/lib/pocknix/pocknix-steam-channel 2>/dev/null || POCKNIX_STEAM_CHANNEL=steamdeck_publicbeta
+if command -v pocknix_steam_channel_guard >/dev/null 2>&1; then
+  pocknix_steam_channel_guard "${STEAM}"
+else
+  mkdir -p "${STEAM}/package"; echo "${POCKNIX_STEAM_CHANNEL}" > "${STEAM}/package/beta"
+fi
 
 exec "${CLIENT}" "$@"
