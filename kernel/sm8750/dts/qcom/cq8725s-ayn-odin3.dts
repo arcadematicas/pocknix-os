@@ -402,3 +402,25 @@
 		regulator-mode = <RPMH_REGULATOR_MODE_LPM>;
 	};
 };
+
+/* Reemplaza la imagen temprana del bootloader: permite CX shutdown / DDR low power en s2idle */
+&remoteproc_soccp {
+	firmware-name = "qcom/sm8750/ayn/odin3/soccp.mbn";
+};
+
+/* Handoff del secuenciador de display en suspend (0567): el display reporta idle y el SoC
+ * alcanza AOSS deep sleep. La ultima region es el GDSC de MDSS en dispcc.
+ */
+&soc {
+	display-cesta@af20000 {
+		compatible = "armada,sm8750-disp-cesta";
+		reg = <0x0 0x0af20000 0x0 0x1000>,
+		      <0x0 0x0af21000 0x0 0x7000>,
+		      <0x0 0x0af30000 0x0 0x7000>,
+		      <0x0 0x0af09000 0x0 0x8>;
+		reg-names = "rscc", "crm", "wrapper", "gdsc";
+		power-domains = <&rpmhpd RPMHPD_MMCX>;
+		required-opps = <&rpmhpd_opp_low_svs>;
+		armada,mdss = <&mdss>;
+	};
+};
