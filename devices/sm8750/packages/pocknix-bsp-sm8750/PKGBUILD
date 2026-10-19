@@ -28,7 +28,31 @@ pkgname=pocknix-bsp-sm8750
 pkgver=0.2.0
 # -8: bring-up de sensores del 15/10 (pd-mapper + cadena SSC) y unidades habilitadas
 # (el -7 se construyo ANTES del bring-up de sensores de la tarde).
-pkgrel=8
+# -10 (16/10): la cadena de sensores pasa de optdepend a DEPENDENCIA REAL. El BSP ya
+#   INSTALA los drop-ins que la necesitan (pd-mapper.service.d/10-odin3.conf,
+#   hexagonrpcd-adsp-sensorspd.service.d/10-tree.conf, pocknix-sensors-tree) y HABILITA
+#   hexagonrpcd-adsp-sensorspd, asi que sin los paquetes el dispositivo arranca medio roto.
+#   Ademas es lo que modela el grafo: `devices/sm8750/packages.list` (la via REAL de
+#   instalacion de estos paquetes) NO lo recorre el gate `stage-check`, que solo sigue
+#   depends+optdepends -> sin esta arista la cadena entera quedaba huerfana y no se podia
+#   publicar. libqrtr entra transitivamente via pd-mapper.
+#   Ver docs/CIERRE-20261016-PUBLICACION.md §4 y docs/SENSORES-ODIN3-2026-10-15.md.
+# -11 (17/10): dos arreglos de la instalacion por OTA en la Odin:
+#   (a) pocknix-sensors-tree.service apuntaba a /usr/bin/pocknix-sensors-tree, pero el paquete
+#       instala el script en /usr/local/bin -> 203/EXEC y la cadena de sensores entera se caia
+#       (sin arbol HexagonFS no hay pd-mapper ni IIO devices). Corregido el ExecStart.
+#   (b) el BSP ya no instala power-button-daemon.py/-.service: los provee pocknix-system-overlay
+#       (version del 14/10 con toque=suspender y mantener=menu). Tenerlos en los dos hacia que
+#       pacman abortara la transaccion entera ("exists in both").
+# -12 (17/10): arranque de sensores a prueba de carreras. hexagonrpcd ahora va After=pd-mapper
+#   (el ADSP solo acepta INIT_ATTACH_SNS con "sensor_pd" registrado) y con Restart=always (salia
+#   con codigo 0 y systemd no lo reintentaba), y iio-sensor-proxy se ordena despues del SSC
+#   (enumera una sola vez al arrancar). Verificado en la Odin: rotv disponible.
+# -13 (17/10): splash de arranque con el wordmark "calvOS" centrado justo debajo de "ODIN 3"
+#   (antes iba en la esquina inferior derecha), algo mas pequeno. Mismas 240 frames, 46,4 MB.
+# -14 (17/10): se vuelve a la ESQUINA (como el diseno anterior), calvOS algo mas pequeno (100px)
+#   y con FUNDIDO de entrada (frames 70-120) para que aparezca despues de "ODIN 3". 48,4 MB.
+pkgrel=14
 pkgdesc="pocknix board support: SM8750 family (AYN Odin 3, KONKR Pocket FIT Elite) — board dispatch, input maps, audio UCM + Odin 3 daemons (OLED care, buttons, power/thermal, MangoHud toggle, splash, Steam UI watchdog, SteamOS session-manager shim)"
 arch=('any')
 url="https://github.com/arcadematicas/pocknix-odin3-support"
@@ -36,8 +60,18 @@ license=('GPL2')
 # python is for the button/OLED/pergame/MangoHud daemons and the session-manager shim; sudo is
 # for the sudoers.d drop-in that lets the shim switch power profiles without a password.
 # pocknix-firmware-sm8750 is ours (pocknix-os localrepo), so it is visible to the build chroot.
+#
+# La cadena de sensores del ADSP (bring-up del 15/10) son DEPENDENCIAS REALES, no optdepends:
+# este BSP instala los drop-ins que las usan (pd-mapper.service.d/10-odin3.conf,
+# hexagonrpcd-adsp-sensorspd.service.d/10-tree.conf, pocknix-sensors-tree) y habilita
+# hexagonrpcd-adsp-sensorspd, asi que sin los paquetes el dispositivo arranca medio roto.
+# Ademas modela el grafo: `devices/sm8750/packages.list` (la via REAL de instalacion) NO lo
+# recorre el gate `stage-check`, que solo sigue depends+optdepends -> sin esta arista la cadena
+# entera quedaba huerfana y no se podia publicar. libqrtr entra transitivamente via pd-mapper.
+# Ver docs/CIERRE-20261016-PUBLICACION.md §4 y docs/SENSORES-ODIN3-2026-10-15.md.
 depends=('pocknix-bsp-common' 'pocknix-firmware-sm8750' 'python' 'sudo' 'sdl2'
-          'pocknix-system-overlay')
+          'pocknix-system-overlay'
+          'hexagonrpc' 'libssc' 'msm-firmware-loader' 'pd-mapper' 'pocknix-sensors-config')
 # gcc + SDL2 headers to build the OLED pixel refresher (see build()).
 makedepends=('sdl2')
 # Exactly one device BSP may be installed (wrong-device guard for a shared repo).
@@ -47,7 +81,6 @@ conflicts=('pocknix-bsp')
 optdepends=('inputplumber: gamepad -> Steam Input mapping (01-ayn-controller.yaml)'
             'alsa-ucm-conf: base UCM (codec include sequences for the AYN-Odin3 UCM)'
             'mangohud: MangoHud.conf is the Odin 3 layout (compact top bar)'
-            'hexagonrpcd: sensor daemon — the unit ships but the binary does not (see its README)'
             'fex-emu: /etc/environment.d/fex-fix.conf carries the steamwebhelper stability flags')
 backup=('etc/sudoers.d/90-pocknix-steamos-manager'
         'etc/MangoHud/MangoHud.conf'
@@ -109,7 +142,10 @@ package() {
   # --- daemons and CLI helpers -> /usr/local/bin ------------------------------
   # /usr/local/bin, not /usr/bin: device-local glue, and every unit below hardcodes that path.
   local bin="${pkgdir}/usr/local/bin"
-  install -Dm755 "${sd}/daemons/power-button-daemon.py"          "${bin}/power-button-daemon.py"
+  # power-button-daemon.py/service NO se instalan aqui: los provee pocknix-system-overlay
+  # (version del 14/10: toque = suspender, mantener = menu de apagado). La copia de este BSP era
+  # la vieja (solo apagaba pantalla) y ambos paquetes peleaban por la MISMA ruta -> pacman
+  # abortaba la transaccion ("exists in both"). El `enable` de la unidad se mantiene aqui.
   install -Dm755 "${sd}/daemons/volume-button-daemon.py"         "${bin}/volume-button-daemon.py"
   install -Dm755 "${sd}/oled-care/oled-care-daemon.py"           "${bin}/oled-care-daemon.py"
   install -Dm755 "${sd}/oled-care/oled-refresher-auto"           "${bin}/oled-refresher-auto"
@@ -141,7 +177,7 @@ package() {
 
   # --- systemd units ----------------------------------------------------------
   local unit="${pkgdir}/usr/lib/systemd/system"
-  install -Dm644 "${sd}/daemons/power-button-daemon.service"              "${unit}/power-button-daemon.service"
+  # power-button-daemon.service lo instala pocknix-system-overlay (ver nota arriba).
   install -Dm644 "${sd}/daemons/volume-button-daemon.service"             "${unit}/volume-button-daemon.service"
   install -Dm644 "${sd}/oled-care/oled-care-daemon.service"               "${unit}/oled-care-daemon.service"
   install -Dm644 "${sd}/oled-care/oled-refresher.service"                 "${unit}/oled-refresher.service"
@@ -168,6 +204,8 @@ package() {
     "${pkgdir}/usr/lib/systemd/system/pd-mapper.service.d/10-odin3.conf"
   install -Dm644 "${sd}/sensors/hexagonrpcd-adsp-sensorspd.service.d/10-tree.conf" \
     "${pkgdir}/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/10-tree.conf"
+  install -Dm644 "${sd}/sensors/iio-sensor-proxy.service.d/10-ssc.conf" \
+    "${pkgdir}/usr/lib/systemd/system/iio-sensor-proxy.service.d/10-ssc.conf"
   install -Dm644 "${sd}/steamos-manager/pocknix-steamos-manager.service"  "${unit}/pocknix-steamos-manager.service"
   # Re-escaneo de InputPlumber cuando aparece tarde el mando interno del Odin 3.
   # NO se habilita (sin [Install]): la dispara la regla udev de mas abajo via
