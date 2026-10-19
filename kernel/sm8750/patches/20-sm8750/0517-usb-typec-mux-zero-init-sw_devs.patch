@@ -1,0 +1,35 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Anze <aanzdev@gmail.com>
+Date: Mon, 27 Jul 2026 18:00:00 +0200
+Subject: [PATCH] usb: typec: mux: zero-init the switch match array
+
+fwnode_typec_switch_get() declares the match array on the stack without
+initialising it:
+
+	struct typec_switch_dev *sw_devs[TYPEC_MUX_MAX_DEVS];
+
+and passes it to fwnode_connection_find_matches(), which fills the slots
+one at a time. The dedup loop in typec_switch_match() reads every slot
+before fwnode_connection_find_matches() has filled them, so a valid
+switch can be dropped by a chance comparison against stack garbage.
+
+(The -EPROBE_DEFER half of the original patch is already upstream in
+7.2; only the zero-initialisation was left.)
+
+Signed-off-by: Anze <aanzdev@gmail.com>
+---
+ drivers/usb/typec/mux.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/usb/typec/mux.c b/drivers/usb/typec/mux.c
+--- a/drivers/usb/typec/mux.c
++++ b/drivers/usb/typec/mux.c
+@@ -81,7 +81,7 @@
+  */
+ struct typec_switch *fwnode_typec_switch_get(struct fwnode_handle *fwnode)
+ {
+-	struct typec_switch_dev *sw_devs[TYPEC_MUX_MAX_DEVS];
++	struct typec_switch_dev *sw_devs[TYPEC_MUX_MAX_DEVS] = {};
+ 	struct typec_switch *sw;
+ 	int count;
+ 	int err;
