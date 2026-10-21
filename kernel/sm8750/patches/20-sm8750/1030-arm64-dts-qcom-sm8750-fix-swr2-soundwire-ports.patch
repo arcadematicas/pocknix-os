@@ -1,0 +1,39 @@
+From: Neil Armstrong <neil.armstrong@linaro.org>
+Subject: [PATCH] arm64: dts: qcom: sm8750: fix soundwire ports properties
+
+Port literal del hunk swr2 del commit upstream c0bec4b58b8e ("arm64: dts: qcom:
+sm8650: fix soundwire ports properties") al SM8750, que nadie habia portado.
+Sin el, swr2 declara dout-ports=0 cuando el hardware tiene 1 y el controlador TX
+queda sin puertos: el camino DMIC->WCD939x->swr2->lpass_txmacro->TX_CODEC_DMA_TX_3
+no puede mover datos y la captura da EIO (Odin 3, microfono).
+
+--- a/arch/arm64/boot/dts/qcom/sm8750.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8750.dtsi
+@@ -2649,17 +2649,17 @@
+ 			pinctrl-names = "default";
+ 
+ 			qcom,din-ports = <4>;
+-			qcom,dout-ports = <0>;
++			qcom,dout-ports = <1>;
+ 
+-			qcom,ports-sinterval-low =	/bits/ 8 <0x01 0x01 0x03 0x03>;
+-			qcom,ports-offset1 =		/bits/ 8 <0x00 0x00 0x01 0x01>;
+-			qcom,ports-offset2 =		/bits/ 8 <0x00 0x00 0x00 0x00>;
+-			qcom,ports-hstart =		/bits/ 8 <0xff 0xff 0xff 0xff>;
+-			qcom,ports-hstop =		/bits/ 8 <0xff 0xff 0xff 0xff>;
+-			qcom,ports-word-length =	/bits/ 8 <0xff 0xff 0xff 0xff>;
+-			qcom,ports-block-pack-mode =	/bits/ 8 <0xff 0xff 0xff 0xff>;
+-			qcom,ports-block-group-count =	/bits/ 8 <0xff 0xff 0xff 0xff>;
+-			qcom,ports-lane-control =	/bits/ 8 <0x01 0x02 0x00 0x00>;
++			qcom,ports-sinterval-low =	/bits/ 8 <0x00 0x01 0x01 0x03 0x03>;
++			qcom,ports-offset1 =		/bits/ 8 <0x00 0x00 0x00 0x01 0x01>;
++			qcom,ports-offset2 =		/bits/ 8 <0x00 0x00 0x00 0x00 0x00>;
++			qcom,ports-hstart =		/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
++			qcom,ports-hstop =		/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
++			qcom,ports-word-length =	/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
++			qcom,ports-block-pack-mode =	/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
++			qcom,ports-block-group-count =	/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
++			qcom,ports-lane-control =	/bits/ 8 <0xff 0xff 0xff 0xff 0xff>;
+ 
+ 			#address-cells = <2>;
+ 			#size-cells = <0>;
