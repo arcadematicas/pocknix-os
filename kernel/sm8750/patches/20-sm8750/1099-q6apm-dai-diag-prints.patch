@@ -25,7 +25,7 @@ Quitar cuando se encuentre la causa del EIO en hw:0,2.
  	struct q6apm_dai_rtd *prtd = runtime->private_data;
  	int ret = 0;
  
-+	dev_info(dev, "q6apm-dai DIAG: trigger cmd=%d stream=%d\n", cmd, substream->stream);
++	dev_info(component->dev, "q6apm-dai DIAG: trigger cmd=%d stream=%d\n", cmd, substream->stream);
  	switch (cmd) {
  	case SNDRV_PCM_TRIGGER_START:
  	case SNDRV_PCM_TRIGGER_RESUME:
