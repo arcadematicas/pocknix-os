@@ -25,7 +25,7 @@
 pkgname=gamescope
 epoch=1
 pkgver=3.16.31.ogc1.20260928.afd6eac6
-pkgrel=1
+pkgrel=2
 _commit=afd6eac6e1b5045119831b63854bad68ec4fd92c
 install=gamescope.install
 pkgdesc="SteamOS session compositing WM — OGC base + armada HDR patches (msm/rotated panels)"
@@ -73,9 +73,11 @@ source=("gamescope::git+https://github.com/OpenGamingCollective/gamescope.git#co
         '0026-upscale-use-sgsr-for-sdr-fsr-requests.patch'
         '0027-steamcompmgr-elapsed-time-fps-limiter.patch'
         '0028-improve-frame-pacing.patch'
+        '0029-libliftoff-treat-enodev-as-no-fit.patch'
+        '0030-libliftoff-give-planes-the-layer-zpos.patch'
         # --- nuestros ---
         '0010-DRMBackend-add-rotated-output-max-height.patch')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {
   cd gamescope
@@ -109,6 +111,8 @@ prepare() {
     0026-upscale-use-sgsr-for-sdr-fsr-requests \
     0027-steamcompmgr-elapsed-time-fps-limiter \
     0028-improve-frame-pacing \
+    0029-libliftoff-treat-enodev-as-no-fit \
+    0030-libliftoff-give-planes-the-layer-zpos \
     ; do
     patch -p1 -F2 < "${srcdir}/${_p}.patch"
   done
