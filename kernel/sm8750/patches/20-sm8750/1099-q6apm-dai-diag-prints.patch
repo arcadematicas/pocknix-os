@@ -1,27 +1,44 @@
 From: Alfred <alfred@local>
-Subject: [DIAG] ASoC: q6apm-dai: prints temporales para depurar la captura
+Subject: [DIAG] ASoC: q6apm: prints temporales en FE (q6apm-dai) y BE (lpass-dais)
 
-TEMPORAL: solo dev_info en open/prepare/trigger. No cambia comportamiento.
-Quitar cuando se encuentre la causa del EIO en hw:0,2.
+TEMPORAL: solo dev_info. No cambia comportamiento. Para ver si el BE de captura
+(TX_CODEC_DMA_TX_3) se llega a preparar/arrancar. Quitar al cerrar el diagnostico.
 
 --- a/sound/soc/qcom/qdsp6/q6apm-dai.c
 +++ b/sound/soc/qcom/qdsp6/q6apm-dai.c
-@@ -300,12 +300,14 @@
- 		return ret;
+@@ -301,6 +301,7 @@
  	}
  
+ 	dev_info(dev, "q6apm-dai DIAG: graph_prepare...\n");
 +	dev_info(dev, "q6apm-dai DIAG: graph_prepare...\n");
  	ret = q6apm_graph_prepare(prtd->graph);
  	if (ret) {
  		dev_err(dev, "Failed to prepare Graph %d\n", ret);
- 		return ret;
+@@ -308,6 +309,7 @@
  	}
  
+ 	dev_info(dev, "q6apm-dai DIAG: graph_start...\n");
 +	dev_info(dev, "q6apm-dai DIAG: graph_start...\n");
  	ret = q6apm_graph_start(prtd->graph);
  	if (ret) {
  		dev_err(dev, "Failed to Start Graph %d\n", ret);
-@@ -361,6 +363,7 @@
+@@ -399,6 +401,7 @@
+ 
+ 	graph_id = cpu_dai->driver->id;
+ 	dev_info(dev, "q6apm-dai DIAG: open stream=%d graph_id=%d\n", substream->stream, graph_id);
++	dev_info(dev, "q6apm-dai DIAG: open stream=%d graph_id=%d\n", substream->stream, graph_id);
+ 
+ 	pdata = snd_soc_component_get_drvdata(component);
+ 	if (!pdata) {
+@@ -415,6 +418,7 @@
+ 	prtd->graph = q6apm_graph_open(dev, event_handler, prtd, graph_id, substream->stream);
+ 	if (IS_ERR(prtd->graph)) {
+ 		dev_err(dev, "q6apm-dai DIAG: graph_open ERR %ld\n", PTR_ERR(prtd->graph));
++		dev_err(dev, "q6apm-dai DIAG: graph_open ERR %ld\n", PTR_ERR(prtd->graph));
+ 		dev_err(dev, "%s: Could not allocate memory\n", __func__);
+ 		ret = PTR_ERR(prtd->graph);
+ 		goto err;
+@@ -790,6 +794,7 @@
  	struct q6apm_dai_rtd *prtd = runtime->private_data;
  	int ret = 0;
  
@@ -29,19 +46,24 @@ Quitar cuando se encuentre la causa del EIO en hw:0,2.
  	switch (cmd) {
  	case SNDRV_PCM_TRIGGER_START:
  	case SNDRV_PCM_TRIGGER_RESUME:
-@@ -395,6 +398,7 @@
- 	int graph_id, ret;
+--- a/sound/soc/qcom/qdsp6/q6apm-lpass-dais.c
++++ b/sound/soc/qcom/qdsp6/q6apm-lpass-dais.c
+@@ -172,6 +172,8 @@
+ 	struct q6apm_lpass_dai_data *dai_data = dev_get_drvdata(dai->dev);
+ 	int ret = 0;
  
- 	graph_id = cpu_dai->driver->id;
-+	dev_info(dev, "q6apm-dai DIAG: open stream=%d graph_id=%d\n", substream->stream, graph_id);
++	dev_info(dai->dev, "q6apm-lpass DIAG: trigger dai_id=%d cmd=%d\n", dai->id, cmd);
++
+ 	switch (cmd) {
+ 	case SNDRV_PCM_TRIGGER_START:
+ 	case SNDRV_PCM_TRIGGER_RESUME:
+@@ -245,6 +247,9 @@
+ 	int graph_id = dai->id;
+ 	int rc;
  
- 	pdata = snd_soc_component_get_drvdata(component);
- 	if (!pdata) {
-@@ -410,6 +414,7 @@
- 	prtd->substream = substream;
- 	prtd->graph = q6apm_graph_open(dev, event_handler, prtd, graph_id, substream->stream);
- 	if (IS_ERR(prtd->graph)) {
-+		dev_err(dev, "q6apm-dai DIAG: graph_open ERR %ld\n", PTR_ERR(prtd->graph));
- 		dev_err(dev, "%s: Could not allocate memory\n", __func__);
- 		ret = PTR_ERR(prtd->graph);
- 		goto err;
++	dev_info(dai->dev, "q6apm-lpass DIAG: prepare dai_id=%d stream=%d graph=%p\n",
++		 dai->id, substream->stream, dai_data->graph[dai->id]);
++
+ 	/* Stopping a just-restored port drops BCLK while codecs may be starting */
+ 	if (dai_data->is_restored[dai->id]) {
+ 		dai_data->is_restored[dai->id] = false;
