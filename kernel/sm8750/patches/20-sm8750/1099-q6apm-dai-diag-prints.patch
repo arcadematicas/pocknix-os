@@ -1,9 +1,8 @@
 From: Alfred <alfred@local>
 Subject: [DIAG] ASoC: q6apm-dai: prints temporales para depurar la captura
 
-TEMPORAL: solo logs (dev_info) en open/prepare/trigger/pointer. No cambia
-comportamiento. Sirve para ver donde se queda arecord -D hw:0,2 (EIO).
-Quitar cuando se encuentre la causa.
+TEMPORAL: solo dev_info en open/prepare/trigger. No cambia comportamiento.
+Quitar cuando se encuentre la causa del EIO en hw:0,2.
 
 --- a/sound/soc/qcom/qdsp6/q6apm-dai.c
 +++ b/sound/soc/qcom/qdsp6/q6apm-dai.c
@@ -46,13 +45,3 @@ Quitar cuando se encuentre la causa.
  		dev_err(dev, "%s: Could not allocate memory\n", __func__);
  		ret = PTR_ERR(prtd->graph);
  		goto err;
-@@ -488,6 +493,9 @@
- static snd_pcm_uframes_t q6apm_dai_pointer(struct snd_soc_component *component,
- 					   struct snd_pcm_substream *substream)
- {
-+	static unsigned int _diag_n;
-+	if ((_diag_n++ % 100) == 0)
-+		dev_info(dev, "q6apm-dai DIAG: pointer avail=%lu pos=%lu\n", (unsigned long)snd_pcm_lib_available(substream), (unsigned long)prtd->pos);
- 	struct snd_pcm_runtime *runtime = substream->runtime;
- 	struct q6apm_dai_rtd *prtd = runtime->private_data;
- 	snd_pcm_uframes_t ptr;
