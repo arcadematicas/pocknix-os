@@ -1,51 +1,50 @@
 From: Alfred <alfred@local>
-Subject: [TEST] drm/panel: icna35xx: pon el modo de 60 Hz primero (preferido)
+Subject: [TEST] drm/panel: icna3520: pon el modo de 60 Hz primero (preferido)
 
 PRUEBA: gamescope/KMS usa el PRIMER modo de la tabla como preferido (ROCKNIX #3307).
-Con 120 primero, el panel arranca a 120 y el modo 60 nunca se prueba en el primer
-modeset. Sirve para saber si el modo 60 puede inicializar. NO es la solucion final
-(queremos 120 por defecto).
+Solo toca icna3520_modes (la primera version toco icna3512 por error).
+Sirve para saber si el panel puede inicializar en 60 Hz; NO es la solucion final.
 
 --- a/drivers/gpu/drm/panel/panel-chipone-icna35xx.c
 +++ b/drivers/gpu/drm/panel/panel-chipone-icna35xx.c
-@@ -239,29 +239,30 @@
+@@ -267,29 +267,30 @@
  
- static const struct drm_display_mode icna3512_modes[] = {
+ static const struct drm_display_mode icna3520_modes[] = {
  	{
 -		/* 120Hz */
--		.clock = (1080 + 156 + 1 + 23) * (1920 + 412 + 1 + 15) * 120 / 1000,
+-		.clock = (1080 + 24 + 1 + 24) * (1920 + 28 + 1 + 28) * 120 / 1000,
 +		/* 60Hz */
-+		.clock = (1080 + 156 + 1 + 23) * (1920 + 2760 + 1 + 15) * 60 / 1000,
++		.clock = (1080 + 24 + 1 + 24) * (1920 + 2006 + 1 + 28) * 60 / 1000,
  		.hdisplay = 1080,
- 		.hsync_start = 1080 + 156,
- 		.hsync_end = 1080 + 156 + 1,
- 		.htotal = 1080 + 156 + 1 + 23,
+ 		.hsync_start = 1080 + 24,
+ 		.hsync_end = 1080 + 24 + 1,
+ 		.htotal = 1080 + 24 + 1 + 24,
  		.vdisplay = 1920,
--		.vsync_start = 1920 + 412,
--		.vsync_end = 1920 + 412 + 1,
--		.vtotal = 1920 + 412 + 1 + 15,
-+		.vsync_start = 1920 + 2760,
-+		.vsync_end = 1920 + 2760 + 1,
-+		.vtotal = 1920 + 2760 + 1 + 15,
+-		.vsync_start = 1920 + 28,
+-		.vsync_end = 1920 + 28 + 1,
+-		.vtotal = 1920 + 28 + 1 + 28,
++		.vsync_start = 1920 + 2006,
++		.vsync_end = 1920 + 2006 + 1,
++		.vtotal = 1920 + 2006 + 1 + 28,
  	},
  	{
 -		/* 60Hz */
--		.clock = (1080 + 156 + 1 + 23) * (1920 + 2760 + 1 + 15) * 60 / 1000,
+-		.clock = (1080 + 24 + 1 + 24) * (1920 + 2006 + 1 + 28) * 60 / 1000,
 +		/* 120Hz */
-+		.clock = (1080 + 156 + 1 + 23) * (1920 + 412 + 1 + 15) * 120 / 1000,
++		.clock = (1080 + 24 + 1 + 24) * (1920 + 28 + 1 + 28) * 120 / 1000,
  		.hdisplay = 1080,
- 		.hsync_start = 1080 + 156,
- 		.hsync_end = 1080 + 156 + 1,
- 		.htotal = 1080 + 156 + 1 + 23,
+ 		.hsync_start = 1080 + 24,
+ 		.hsync_end = 1080 + 24 + 1,
+ 		.htotal = 1080 + 24 + 1 + 24,
  		.vdisplay = 1920,
--		.vsync_start = 1920 + 2760,
--		.vsync_end = 1920 + 2760 + 1,
--		.vtotal = 1920 + 2760 + 1 + 15,
-+		.vsync_start = 1920 + 412,
-+		.vsync_end = 1920 + 412 + 1,
-+		.vtotal = 1920 + 412 + 1 + 15,
+-		.vsync_start = 1920 + 2006,
+-		.vsync_end = 1920 + 2006 + 1,
+-		.vtotal = 1920 + 2006 + 1 + 28,
++		.vsync_start = 1920 + 28,
++		.vsync_end = 1920 + 28 + 1,
++		.vtotal = 1920 + 28 + 1 + 28,
  	}
 +
  };
  
- static const struct drm_display_mode icna3520_modes[] = {
+ static struct panel_desc icna3512_desc = {
