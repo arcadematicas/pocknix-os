@@ -67,3 +67,4 @@ TEMPORAL: solo dev_info. No cambia comportamiento. Para ver si el BE de captura
  	/* Stopping a just-restored port drops BCLK while codecs may be starting */
  	if (dai_data->is_restored[dai->id]) {
  		dai_data->is_restored[dai->id] = false;
+diff 
