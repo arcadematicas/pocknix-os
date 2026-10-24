@@ -29,7 +29,7 @@
 pkgname=gamescope-session
 _commit=0232e0c0410b051b0c679c99c55bf34f5aaf9f78
 pkgver=20260928
-pkgrel=2
+pkgrel=3
 pkgdesc="gamescope-session-plus (OGC): gamescope standalone + cliente hermano, sesiones por sessions.d"
 arch=('aarch64')
 url="https://github.com/OpenGamingCollective/gamescope-session"
