@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Pocknix Tools
+Name=CalvOS Tools
 Comment=Snapshot rollback and system maintenance
 Exec=/usr/bin/pocknix-tools
 TryExec=/usr/bin/pocknix-tools

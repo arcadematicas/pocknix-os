@@ -475,6 +475,13 @@ main() {
   printf 'POCKNIX_BASE_SNAPSHOT=%s\nPOCKNIX_IMAGE_BUILD=%s\n' \
     "${POCKNIX_BASE_SNAPSHOT:-live}" "$(date -u +%Y-%m-%d)" > "${ROOTFS_DIR}/etc/pocknix-release"
 
+  # Branding visible de CalvOS. Solo cambia NAME/PRETTY_NAME; el ID sigue siendo
+  # archarm para que nada que detecte la distro (AUR, scripts) se rompa.
+  if [ -f "${ROOTFS_DIR}/etc/os-release" ]; then
+    sed -i 's/^NAME=.*/NAME="CalvOS"/; s/^PRETTY_NAME=.*/PRETTY_NAME="CalvOS"/' \
+      "${ROOTFS_DIR}/etc/os-release"
+  fi
+
   # 5. bake the native ARM Steam client into a re-seedable seed (offline first boot)
   bootstrap_steam_seed "${ROOTFS_DIR}"
 
