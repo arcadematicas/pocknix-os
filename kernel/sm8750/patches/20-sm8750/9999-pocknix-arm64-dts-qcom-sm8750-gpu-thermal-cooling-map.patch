@@ -28,7 +28,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss0_cdev: gpuss0-cdev {
@@ -36,6 +35,7 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  
 @@ -7302,6 +7315,12 @@
@@ -55,7 +55,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss1_cdev: gpuss1-cdev {
@@ -63,6 +62,7 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  
 @@ -7320,6 +7346,12 @@
@@ -82,7 +82,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss2_cdev: gpuss2-cdev {
@@ -90,6 +89,7 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  
 @@ -7338,6 +7377,12 @@
@@ -109,7 +109,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss3_cdev: gpuss3-cdev {
@@ -117,6 +116,7 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  
 @@ -7356,6 +7408,12 @@
@@ -136,7 +136,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss4_cdev: gpuss4-cdev {
@@ -144,6 +143,7 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  
 @@ -7374,6 +7439,12 @@
@@ -163,7 +163,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss5_cdev: gpuss5-cdev {
@@ -171,6 +170,7 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  
 @@ -7392,6 +7470,12 @@
@@ -190,7 +190,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss6_cdev: gpuss6-cdev {
@@ -198,6 +197,7 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  
 @@ -7410,6 +7501,12 @@
@@ -217,7 +217,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
  					hysteresis = <0>;
  					type = "critical";
  				};
- 			};
 +
 +			cooling-maps {
 +				gpuss7_cdev: gpuss7-cdev {
@@ -225,5 +224,6 @@ Reported by WhiteEagle-12 (Holodor) in arcadematicas/pocknix-odin3-support#1.
 +					cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 +				};
 +			};
+ 			};
  		};
  

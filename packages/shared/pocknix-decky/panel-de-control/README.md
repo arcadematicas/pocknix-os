@@ -25,14 +25,14 @@ Lo hago yo, Hooandee, y cada cosa la pruebo en mis propias máquinas. Panel no s
 Si tu equipo no deja leer o cambiar algo, simplemente no aparece, y los números que ves son los
 reales.
 
-Funciona con [Decky Loader](https://decky.xyz/) y está en español, inglés, italiano, alemán y
-portugués de Brasil.
+Funciona con [Decky Loader](https://decky.xyz/) y está en español, inglés, italiano, alemán,
+portugués de Brasil y francés.
 
 ## 🎬 Guías en vídeo
 
-| [![Panel de Control a fondo](https://img.youtube.com/vi/sDpXFTxG7NQ/hqdefault.jpg)](https://youtu.be/sDpXFTxG7NQ) | [![Cómo instalar temas](https://img.youtube.com/vi/aENDY4BFcRE/hqdefault.jpg)](https://youtu.be/aENDY4BFcRE) | [![Panel en ARM con Armada](https://img.youtube.com/vi/1BHufGK6nbo/hqdefault.jpg)](https://youtu.be/1BHufGK6nbo) |
-|:---:|:---:|:---:|
-| **El plugin a fondo** | **Cómo instalar temas** | **Panel en ARM con Armada** |
+| [![Panel de Control a fondo](https://img.youtube.com/vi/sDpXFTxG7NQ/hqdefault.jpg)](https://youtu.be/sDpXFTxG7NQ) | [![Cómo instalar temas](https://img.youtube.com/vi/aENDY4BFcRE/hqdefault.jpg)](https://youtu.be/aENDY4BFcRE) | [![Panel en ARM con Armada](https://img.youtube.com/vi/1BHufGK6nbo/hqdefault.jpg)](https://youtu.be/1BHufGK6nbo) | [![Tele, música y fondos con Ambiente](https://img.youtube.com/vi/tSKquRbJgeg/hqdefault.jpg)](https://youtu.be/tSKquRbJgeg) |
+|:---:|:---:|:---:|:---:|
+| **El plugin a fondo** | **Cómo instalar temas** | **Panel en ARM con Armada** | **Tele, música y fondos** |
 
 ## Qué hace
 
@@ -63,8 +63,12 @@ explicación. FSR4, HDR, escalado y compañía, pero solo lo que tu versión de 
 🧹 **Limpieza.** Descubre cuánto ocupan la Shader Cache y los prefijos de tus juegos y recupera
 espacio en un momento.
 
+🌄 **Ambiente.** Tus propios fondos en Inicio y un reproductor de música, radio, YouTube, Twitch y
+tele que sigue sonando mientras juegas. Más abajo te lo cuento.
+
 ✨ **Temas.** Cambia la cara de Steam por completo con temas que se instalan y se actualizan desde
-el propio Panel.
+el propio Panel. Los que están en acceso anticipado salen con la etiqueta Early y se instalan
+desde su zip.
 
 🎮 **Mandos.** Remapeo de botones que se entiende con Handheld Daemon e InputPlumber. Todavía en
 beta.
@@ -72,14 +76,37 @@ beta.
 🧩 **A tu manera.** Ordena y oculta pestañas, crea tus propias vistas y elige el color de acento.
 Todo se maneja con el mando, y las actualizaciones llegan solas al menú rápido.
 
+## 📺 Ambiente
+
+Pon de fondo en Inicio tus fotos, tus vídeos o el arte de tus juegos, y al pasar por un juego deja
+que suene su banda sonora o se vea su tráiler.
+
+Además es un reproductor para todo: tu música, radios de todo el mundo en un mapa, YouTube, Twitch
+o canales de tele con listas M3U. Lo pones en cola, eliges repetir o aleatorio y te lo llevas a la
+partida en un mini reproductor que manejas con el mando. Y para no escribir enlaces con la
+cruceta, escaneas un QR con el móvil y los mandas desde ahí.
+
+Viene apagado, así que Steam se queda como siempre hasta que lo enciendes. En el
+[vídeo](https://youtu.be/tSKquRbJgeg) lo ves en marcha.
+
 ## 📱 También en ARM
 
 Panel no es solo para PC. Con Armada también funciona en consolas ARM, reconoce el modelo y el chip
 y solo te enseña lo que ese hardware permite tocar. En el [vídeo](https://youtu.be/1BHufGK6nbo)
 explico cómo montarlo paso a paso.
 
+El dial de Potencia mueve la CPU y la GPU juntas o por separado: si un juego tira de gráfica, puedes
+bajar la CPU y dejar la GPU arriba.
+
 Y si tienes una AYN Thor, Panel puede usar la pantalla de abajo como panel táctil mientras juegas en
 la de arriba.
+
+## 🪟 También en Windows
+
+Panel llega a Windows en early access, como widget de Xbox Game Bar y como app. Los temas ya
+funcionan en el Big Picture de Steam igual que en Linux, sin CSS Loader: se instalan, se activan y
+se ajustan desde el propio Panel. El resto de secciones enseña lo que lee tu equipo y se irá abriendo
+poco a poco. Si algo no funciona como esperabas, desde Ajustes puedes mandarme un reporte.
 
 ## 🕹️ Equipos
 
@@ -87,9 +114,9 @@ Lo pruebo todo en las máquinas que tengo en casa: **Steam Deck LCD y OLED, ROG 
 ROG Xbox Ally X, Legion Go, Legion Go S, Legion Go 2 y MSI Claw 8 AI+**, y en ARM, **AYN Thor,
 AYN Odin 3, AYN Odin 2 Portal, Retroid Pocket 5, Retroid Pocket Nova y Anbernic RG Cube**.
 
-Pero muchas más han recibido soporte: OneXFly Apex, GPD Win 5, GPD Win Mini, AOKZOE A1X, MSI Claw A8,
-OneXPlayer X2 Mini Pro y unas cuantas más, incluso PC de sobremesa y la Steam Machine. Si tu equipo
-no está en la lista, Panel mira qué se puede controlar en él y te enseña eso.
+Pero muchas más han recibido soporte: OneXFly Apex, GPD Win 5, GPD Win Mini, AOKZOE A1X, MSI Claw A8, MSI Claw 8 EX AI+,
+OneXPlayer X2 Mini Pro y unas cuantas más, incluso PC de sobremesa, la Steam Machine y la PS5 con Linux. Si tu
+equipo no está en la lista, Panel mira qué se puede controlar en él y te enseña eso.
 
 ## 📦 Instalación
 

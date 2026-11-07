@@ -41,7 +41,7 @@ ANDROID_MIN_GIB=1
 BOOT_GPT_NAME="${POCKNIX_BOOT_GPT_NAME:-POCKNIX}"
 BOOT_FAT_LABEL="${POCKNIX_BOOT_FAT_LABEL:-POCKNIX}"
 ROOT_GPT_NAME="${POCKNIX_ROOT_LABEL:-POCKNIX_ROOT}"   # matches the kernel cmdline root=PARTLABEL=...
-DRY_RUN=0; ASSUME_YES=0; UD_GIB=""; DETECT=0
+DRY_RUN=0; ASSUME_YES=0; UD_GIB=""; DETECT=0; EXCLUDES=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -49,6 +49,7 @@ while [ "$#" -gt 0 ]; do
     --yes|-y)  ASSUME_YES=1 ;;
     --detect)  DETECT=1 ;;
     --userdata-gib) UD_GIB="${2:-}"; shift ;;
+    --exclude) EXCLUDES+=("${2:-}"); shift ;;
     --device) DEVICE="${2:-}"; shift ;;
     -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -138,6 +139,11 @@ if [ "$ROOT_FS" = btrfs ] && findmnt -no FSTYPE /var/cache/pacman 2>/dev/null | 
   _cache=$(du -sxB1 /var/cache/pacman 2>/dev/null | cut -f1); _cache=${_cache:-0}
   SD_USED=$(( SD_USED - _cache )); [ "$SD_USED" -lt 0 ] && SD_USED=0
 fi
+# rutas excluidas (p.ej. /opt): no se clonan, y su tamano se descuenta del calculo
+for _d in "${EXCLUDES[@]}"; do
+  _x=$(du -sxB1 "$_d" 2>/dev/null | cut -f1); _x=${_x:-0}
+  SD_USED=$(( SD_USED - _x )); [ "$SD_USED" -lt 0 ] && SD_USED=0
+done
 SD_USED_GIB=$(( (SD_USED + GiB - 1) / GiB ))
 # headroom: fs metadata + room to boot and update afterwards; 5% or 2 GiB, whichever is more
 _head=$(( SD_USED / 20 )); [ "$_head" -lt $(( 2*GiB )) ] && _head=$(( 2*GiB ))
@@ -314,7 +320,9 @@ say "Cloning rootfs to $ROOT_PART — can take a long time. Be patient - nothing
 rsync -aHAXx --numeric-ids \
   --exclude='/proc/*' --exclude='/sys/*' --exclude='/dev/*' --exclude='/run/*' \
   --exclude='/tmp/*'  --exclude='/mnt/*' --exclude='/media/*' --exclude='/lost+found' \
+  $(for _d in "${EXCLUDES[@]}"; do printf -- "--exclude=%s/* " "$_d"; done) \
   / "$RMNT/"
+for _d in "${EXCLUDES[@]}"; do mkdir -p "$RMNT$_d"; done
 for d in proc sys dev run tmp mnt media flash; do mkdir -p "$RMNT/$d"; done
 if [ "$ROOT_FS" = btrfs ]; then
   rsync -aHAXx --numeric-ids /home/    "$RMNT/home/"

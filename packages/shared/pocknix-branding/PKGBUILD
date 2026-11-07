@@ -4,7 +4,7 @@
 # reads as one surface instead of three unrelated screens).
 pkgname=pocknix-branding
 pkgver=0.1.0
-pkgrel=3
+pkgrel=6
 pkgdesc="Pocknix OS branding: plymouth boot theme, Plasma splash, wallpaper"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"
@@ -15,10 +15,10 @@ install='pocknix-branding.install'
 # copied frames would drift from plymouth's own; output in our own dir survives a plymouth upgrade.
 makedepends=('plymouth')
 source=('watermark.png'
-        'Splash.qml' 'splash-metadata.json' 'wordmark.png'
+        'Splash.qml' 'splash-metadata.json' 'wordmark.png' 'splash-1920x1080.png'
         'wallpaper-1920x1080.png' 'wallpaper-metadata.json'
         'pocknix-branding-init' 'pocknix-branding-init.service')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 _spinner=/usr/share/plymouth/themes/spinner
 
@@ -31,12 +31,14 @@ package() {
   mv "${theme}/spinner.plymouth" "${theme}/pocknix.plymouth"
   # our wordmark replaces the Arch watermark; authored at 2x for DeviceScale=2
   install -Dm644 "${srcdir}/watermark.png" "${theme}/watermark.png"
+  # Splash a pantalla completa que usa pocknix-steam-splash mientras arranca Steam.
+  install -Dm644 "${srcdir}/splash-1920x1080.png" "${theme}/steam-splash.png"
 
   # Name/Description/ImageDir must point at OUR dir, and the field matches the wallpaper
   # so plymouth does not flash black before handing over.
   sed -i -e '/^Name\[[^]]*\]=/d' \
-         -e 's|^Name=.*|Name=Pocknix|' \
-         -e 's|^Description=.*|Description=Pocknix OS boot splash: the stock spinner with the Pocknix wordmark.|' \
+         -e 's|^Name=.*|Name=CalvOS|' \
+         -e 's|^Description=.*|Description=CalvOS boot splash: the stock spinner with the CalvOS wordmark.|' \
          -e "s|^ImageDir=.*|ImageDir=/usr/share/plymouth/themes/pocknix|" \
          -e 's|^BackgroundStartColor=.*|BackgroundStartColor=0x202126|' \
          -e 's|^BackgroundEndColor=.*|BackgroundEndColor=0x202126|' \
@@ -47,6 +49,8 @@ package() {
   install -Dm644 "${srcdir}/splash-metadata.json" "${splash}/metadata.json"
   install -Dm644 "${srcdir}/Splash.qml"           "${splash}/contents/splash/Splash.qml"
   install -Dm644 "${srcdir}/wordmark.png"         "${splash}/contents/splash/images/wordmark.png"
+  # Splash a pantalla completa (calvOS: wordmark + tagline + ecosistema) en vez del wordmark suelto.
+  install -Dm644 "${srcdir}/splash-1920x1080.png" "${splash}/contents/splash/images/splash.png"
 
   # --- wallpaper -----------------------------------------------------------------------
   local wall="${pkgdir}/usr/share/wallpapers/PocknixOS"

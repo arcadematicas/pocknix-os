@@ -95,7 +95,12 @@
 		fan-supply = <&vdd_fan_5v0>;
 		pwms = <&pm8550_pwm 3 40000>;
 
-		#cooling-cells = <2>;
+		/* El ventilador lo gobierna el panel (PocknixControl -> /var/lib/pocknix/fan-mode
+		 * -> pocknix-fancontrol). Con #cooling-cells el kernel registraba ADEMAS un cooling
+		 * device y el thermal lo movia a saltos (0-7) pisando la curva del daemon: el
+		 * ventilador oscilaba 0<->225 con el SoC a 50 C. Sin cooling-cells, el thermal no
+		 * lo toca; el throttling de CPU/GPU sigue igual.
+		 * cooling-levels se queda: inocuo sin cooling-cells, y documenta los niveles. */
 		cooling-levels = <0 30 45 60 70 90 120 150>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&fan_pwm_default>;
@@ -130,11 +135,17 @@
 		assigned-clock-rates = <1536000>;
 
 		model = "SM8750-AYN";
-		audio-routing = 
+
+		widgets = "Microphone", "Internal Mic";
+
+		audio-routing =
 				"IN1_HPHL", "HPHL_OUT",
 				"IN2_HPHR", "HPHR_OUT",
 				"AMIC2", "MIC BIAS2",
-				"TX SWR_INPUT1", "ADC2_OUTPUT";
+				"TX SWR_INPUT1", "ADC2_OUTPUT",
+				"DMIC3", "Internal Mic",
+				"DMIC3", "MIC BIAS3",
+				"TX SWR_INPUT6", "DMIC3_OUTPUT";
 
 		spk-i2s-dai-link {
 			link-name = "Secondary MI2S Playback";
@@ -145,6 +156,22 @@
 
 			codec {
 				sound-dai = <&spk_amp_l 0>, <&spk_amp_r 0>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+
+		dp-dai-link {
+			link-name = "DisplayPort Playback";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_0>;
+			};
+
+			codec {
+				sound-dai = <&mdss_dp0>;
 			};
 
 			platform {
@@ -1308,6 +1335,9 @@
 		compatible = "sdw20217010e00";
 		reg = <0 3>;
 
+		/* Probado tambien <2 2 5 6> (puerto 5, como el Android de stock)
+		 * con la ruta en TX SWR_INPUT5 y SWR_MIC5 en el UCM: la captura
+		 * sigue a ceros. Se vuelve al mapping de siempre, que es estable. */
 		qcom,tx-port-mapping = <2 2 3 4>;
 	};
 };

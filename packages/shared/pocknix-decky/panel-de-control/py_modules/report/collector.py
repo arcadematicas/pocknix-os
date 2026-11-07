@@ -19,6 +19,7 @@ import json
 import os
 import re
 import stat
+import time
 import urllib.parse
 
 import device_tree
@@ -471,6 +472,17 @@ def frontend_crash_diagnostics(
 # Kernel-side evidence: firmware/hardware write rejections (TDP, fan curves) land
 # in dmesg/journal, NOT the plugin's own log. Captured via an injected runner so
 # this stays testable without spawning processes.
+# Decky stopping, killing and reloading plugins, and earlyoom kills: a reinstall that hangs
+# Panel's unload ends in SIGKILL, a reload burst and possibly a frozen, force-rebooted device.
+_LOADER_LIFECYCLE_GREP = (
+    "(?i)still alive|SIGKILL|has been stopped in|already loaded|Shutting down|"
+    "Loaded Panel|Failed to (start|unload)|Loop exited|socket_guard"
+)
+
+# Split-lock traps from Steam's HTTP threads fill a whole tail on some kernels. journalctl
+# built without PCRE2 rejects --grep: those commands run again unfiltered.
+_KERNEL_NOISE_FREE = "^(?!.*(split lock detection|handle_bus_lock))"
+
 _SLEEP_KERNEL_GREP = (
     "(?i)PM: (suspend|resume)|PM: Triggering wakeup|wakeup (irq|source)|waking up|"
     "ACPI: PM:|amd_pmc|Last suspend"
@@ -493,7 +505,13 @@ _KERNEL_CMDS = {
     # neither. The plugin's own log cannot tell these apart.
     "previous_boot_kernel": [
         "/usr/bin/journalctl", "-b", "-1", "-k", "-p", "warning",
-        "-n", "150", "--no-pager",
+        "--grep", _KERNEL_NOISE_FREE, "-n", "150", "--no-pager",
+    ],
+    # The previous boot's last lines from every source, not only kernel warnings: a hard
+    # freeze stops the machine mid-sentence and these show what was running.
+    "previous_boot_tail": [
+        "/usr/bin/journalctl", "-b", "-1", "--grep", _KERNEL_NOISE_FREE,
+        "-n", "120", "--no-pager",
     ],
     "previous_boot_end": [
         "/usr/bin/journalctl", "-b", "-1",
@@ -519,6 +537,20 @@ _KERNEL_CMDS = {
         "/usr/bin/journalctl", "-b", "-1", "-k",
         "--grep", _SLEEP_KERNEL_GREP,
         "-n", "80", "--no-pager",
+    ],
+    "loader_lifecycle": [
+        "/usr/bin/journalctl", "-b", "-u", "plugin_loader",
+        "--grep", _LOADER_LIFECYCLE_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "previous_boot_loader": [
+        "/usr/bin/journalctl", "-b", "-1", "-u", "plugin_loader",
+        "--grep", _LOADER_LIFECYCLE_GREP,
+        "-n", "80", "--no-pager",
+    ],
+    "earlyoom": ["/usr/bin/journalctl", "-b", "-t", "earlyoom", "-n", "30", "--no-pager"],
+    "previous_boot_earlyoom": [
+        "/usr/bin/journalctl", "-b", "-1", "-t", "earlyoom", "-n", "30", "--no-pager",
     ],
     "sleep_inhibitors": ["/usr/bin/systemd-inhibit", "--list", "--no-pager"],
     "pm_wakeup_irq": ["/usr/bin/cat", "/sys/power/pm_wakeup_irq"],
@@ -580,6 +612,9 @@ def kernel_logs(
     for key, cmd in {**_KERNEL_CMDS, **(extra or {})}.items():
         try:
             text = run(cmd)
+            if _KERNEL_NOISE_FREE in cmd and (text is None or text.startswith("[exit ")):
+                at = cmd.index(_KERNEL_NOISE_FREE)
+                text = run(cmd[:at - 1] + cmd[at + 1:])
         except Exception:  # noqa: BLE001
             text = None
         out[key] = redact_text(text[-cap:], home=home, hostname=hostname) if text else None
@@ -591,6 +626,8 @@ def kernel_logs(
 # reads false → probe bug" from "node absent → truly unsupported". Bounded to keep
 # the bundle small and to never sweep /sys recursively.
 _SNAP_MAX_CHIPS = 32
+_RAPL_SAMPLE_S = 0.5
+_sleep = time.sleep
 _SNAP_MAX_NAMES = 128
 _SNAP_MAX_MODULES = 512
 _SNAP_CAP = 60_000
@@ -600,7 +637,7 @@ _HWMON_PATTERNS = (
 _DECK_PPT_NODES = tuple(
     f"power{rail}_{suffix}"
     for rail in (1, 2)
-    for suffix in ("label", "cap", "cap_min", "cap_max")
+    for suffix in ("label", "cap", "cap_min", "cap_max", "average", "input")
 )
 
 
@@ -712,7 +749,7 @@ def _snap_platform_profile(root: str) -> dict:
     return out
 
 
-_LEGACY_PPT = ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt")
+_LEGACY_ASUS_NODES = ("ppt_pl1_spl", "ppt_pl2_sppt", "ppt_fppt", "throttle_thermal_policy")
 
 
 def _snap_asus_ppt(root: str) -> dict:
@@ -731,7 +768,7 @@ def _snap_asus_ppt(root: str) -> dict:
                 "max": read_str(os.path.join(d, "max_value")),
             }
     legacy = os.path.join(root, "sys/devices/platform/asus-nb-wmi")
-    for a in _LEGACY_PPT:
+    for a in _LEGACY_ASUS_NODES:
         v = read_str(os.path.join(legacy, a))
         if v is not None:
             out["asus_nb_wmi"][a] = v
@@ -745,7 +782,11 @@ def _snap_acpi(root: str) -> dict:
         writable = bool(present and os.access(path, os.W_OK))
     except Exception:  # noqa: BLE001
         present, writable = False, False
-    return {"call_present": present, "call_writable": writable}
+    out = {"call_present": present, "call_writable": writable}
+    lockdown = read_str(os.path.join(root, "sys/kernel/security/lockdown"))
+    if lockdown is not None:
+        out["kernel_lockdown"] = lockdown
+    return out
 
 
 def _snap_modules(root: str) -> list[str]:
@@ -778,7 +819,12 @@ def _snap_cpu_gpu_power(root: str) -> dict:
             "hardware_max_khz": read_str(os.path.join(policy, "cpuinfo_max_freq")),
             "applied_min_khz": read_str(os.path.join(policy, "scaling_min_freq")),
             "applied_max_khz": read_str(os.path.join(policy, "scaling_max_freq")),
+            "current_khz": read_str(os.path.join(policy, "scaling_cur_freq")),
+            "governor": read_str(os.path.join(policy, "scaling_governor")),
+            "available_khz": read_str(os.path.join(policy, "scaling_available_frequencies")),
+            "boost_khz": read_str(os.path.join(policy, "scaling_boost_frequencies")),
         })
+    out["boost"] = read_str(os.path.join(root, "sys/devices/system/cpu/cpufreq/boost"))
 
     for maximum in sorted(
         _glob(root, "sys/class/drm/card*/device/tile*/gt*/freq0/max_freq")
@@ -835,6 +881,7 @@ def _snap_cpu_gpu_power(root: str) -> dict:
             ),
         })
 
+    directories = {}
     for surface in sorted(
         _glob(root, "sys/devices/virtual/powercap/intel-rapl*/*")
     )[:_SNAP_MAX_CHIPS]:
@@ -842,13 +889,94 @@ def _snap_cpu_gpu_power(root: str) -> dict:
         pl2 = read_str(os.path.join(surface, "constraint_1_power_limit_uw"))
         if pl1 is None and pl2 is None:
             continue
-        out["rapl"].append({
+        entry = {
             "surface": os.path.basename(surface),
             "name": read_str(os.path.join(surface, "name")),
             "pl1_uw": pl1,
             "pl2_uw": pl2,
-        })
+        }
+        out["rapl"].append(entry)
+        directories[id(entry)] = surface
+    _measure_rapl_power(out["rapl"], directories)
     return out
+
+
+def _read_int(path: str) -> int | None:
+    value = read_str(path)
+    return int(value) if value is not None and value.isdigit() else None
+
+
+def _measure_rapl_power(entries: list, directories: dict) -> None:
+    """Average power of each RAPL zone over a short window, to compare with its limits."""
+    energy = {
+        id(entry): _read_int(os.path.join(directories[id(entry)], "energy_uj"))
+        for entry in entries
+    }
+    if all(value is None for value in energy.values()):
+        return
+    _sleep(_RAPL_SAMPLE_S)
+    for entry in entries:
+        directory = directories[id(entry)]
+        before = energy[id(entry)]
+        after = _read_int(os.path.join(directory, "energy_uj"))
+        if before is None or after is None:
+            continue
+        delta = after - before
+        if delta < 0:
+            wrap = _read_int(os.path.join(directory, "max_energy_range_uj"))
+            if wrap is None:
+                continue
+            delta += wrap + 1
+        entry["power_w"] = round(delta / 1_000_000 / _RAPL_SAMPLE_S, 1)
+
+
+def _snap_devfreq(root: str) -> list:
+    return [
+        {
+            "name": os.path.basename(device),
+            "governor": read_str(os.path.join(device, "governor")),
+            "available_governors": read_str(os.path.join(device, "available_governors")),
+            "min_hz": read_str(os.path.join(device, "min_freq")),
+            "max_hz": read_str(os.path.join(device, "max_freq")),
+            "cur_hz": read_str(os.path.join(device, "cur_freq")),
+            "target_hz": read_str(os.path.join(device, "target_freq")),
+            "available_hz": read_str(os.path.join(device, "available_frequencies")),
+        }
+        for device in sorted(_glob(root, "sys/class/devfreq/*"))[:_SNAP_MAX_CHIPS]
+    ]
+
+
+_PLATFORM_MAX_DRIVERS = 64
+_PLATFORM_MAX_DEVICES = 8
+
+
+def _snap_platform_drivers(root: str) -> dict:
+    """Platform drivers with a bound device and misc devices. Vendor kernels (PS5,
+    handheld EC drivers) surface their own controls here before any class does."""
+    drivers = []
+    for driver in sorted(_glob(root, "sys/bus/platform/drivers/*")):
+        bound = sorted(
+            name for name in _listdir(driver)
+            if os.path.islink(os.path.join(driver, name)) and name not in ("module", "subsystem")
+        )
+        if bound:
+            drivers.append({"name": os.path.basename(driver), "devices": bound[:_PLATFORM_MAX_DEVICES]})
+    return {
+        "drivers": drivers[:_PLATFORM_MAX_DRIVERS],
+        "misc": sorted(os.path.basename(path) for path in _glob(root, "sys/class/misc/*"))[:_PLATFORM_MAX_DRIVERS],
+    }
+
+
+def _snap_ps5(root: str) -> dict:
+    fan = os.path.join(root, "sys/bus/platform/devices/ps5-fan")
+    buzzer = os.path.join(root, "sys/class/misc/ps5_buzzer")
+    if not (os.path.isdir(fan) or os.path.isdir(buzzer)):
+        return {}
+    return {
+        # target_temp is a firmware round trip that can stall; the fan state carries it.
+        "fan_node": os.path.isdir(fan),
+        "buzzer": os.path.isdir(buzzer),
+    }
 
 
 def _snap_arm(root: str) -> dict:
@@ -857,16 +985,7 @@ def _snap_arm(root: str) -> dict:
     tree = device_tree.read_device_tree(root)
     soc = os.path.join(root, "sys/devices/soc0")
     cpuinfo = read_str(os.path.join(root, "proc/cpuinfo"))
-    devfreq = []
-    for device in sorted(_glob(root, "sys/class/devfreq/*"))[:_SNAP_MAX_CHIPS]:
-        devfreq.append({
-            "name": os.path.basename(device),
-            "governor": read_str(os.path.join(device, "governor")),
-            "min_hz": read_str(os.path.join(device, "min_freq")),
-            "max_hz": read_str(os.path.join(device, "max_freq")),
-            "cur_hz": read_str(os.path.join(device, "cur_freq")),
-            "available_hz": read_str(os.path.join(device, "available_frequencies")),
-        })
+    devfreq = _snap_devfreq(root)
     backlight = [
         {
             "name": os.path.basename(device),
@@ -987,6 +1106,7 @@ def _snap_desktop(root: str) -> dict:
                 os.path.join(hwmon, "power1_cap")),
             "overdrive": os.path.exists(os.path.join(device, "pp_od_clk_voltage")),
             "fan_ctrl": sorted(_listdir(os.path.join(device, "gpu_od/fan_ctrl"))),
+            "gpu_busy_percent": read_str(os.path.join(device, "gpu_busy_percent")),
         })
     out["ppfeaturemask"] = read_str(
         os.path.join(root, "sys/module/amdgpu/parameters/ppfeaturemask"))
@@ -1101,7 +1221,7 @@ def sysfs_snapshot(
                   "dmi": {}, "leds": [],
                   "cpu_gpu_power": {"cpufreq": [], "gpu": [], "rapl": []},
                   "desktop": {}, "ec": {}, "pstore": [], "pstore_archive": [],
-                  "arm": {}, "connected_devices": {}}
+                  "arm": {}, "ps5": {}, "platform": {}, "connected_devices": {}}
     try:
         snap["hwmon"] = _snap_hwmon(root)
     except Exception:  # noqa: BLE001
@@ -1152,6 +1272,19 @@ def sysfs_snapshot(
         pass
     try:
         snap["cpu_gpu_power"] = _snap_cpu_gpu_power(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        if not device_tree.is_arm(root):
+            snap["cpu_gpu_power"]["devfreq"] = _snap_devfreq(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["ps5"] = _snap_ps5(root)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        snap["platform"] = _snap_platform_drivers(root)
     except Exception:  # noqa: BLE001
         pass
     try:

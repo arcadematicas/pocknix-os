@@ -361,12 +361,33 @@ Update one to match the other."
   chroot "${BROOT}" bash -lc "cd ${repo_mount} && LC_ALL=C repo-add -q ${repo_db}${addlist}"
 }
 
+# repo-add guards its DB with a *.lck created under `noclobber` and removed only
+# on clean exit (repo-add's own EXIT trap). A SIGKILLed/raced repo-add — OOM,
+# power loss, or this build's EXIT-trap `umount -lf` racing an in-flight repo-add
+# — leaves the .lck behind, and repo-add then refuses to run FOREVER: it only
+# tests that the FILE exists, never that the recorded pid is still alive. The
+# repo-add in main() is silenced (>/dev/null), so on a stale lock the whole build
+# dies on `set -e` with a bare "make: Error 2" and no message. Clear locks whose
+# pid is gone; leave LIVE ones alone (parallel sessions share the shared repo).
+clear_stale_repo_locks() {
+  local lck pid
+  for lck in "${LOCALREPO}"/*.lck "${LOCALREPO_SHARED}"/*.lck; do
+    [ -f "${lck}" ] || continue
+    pid="$(tr -dc '0-9' < "${lck}")"
+    if [ -z "${pid}" ] || ! kill -0 "${pid}" 2>/dev/null; then
+      warn "removing stale repo lock: ${lck} (pid '${pid}' gone)"
+      rm -f "${lck}"
+    fi
+  done
+}
+
 main() {
   # Optional args = package names to build (subset, always rebuilt); no args = build
   # everything, skipping packages already up-to-date in the localrepo (see build_one).
   # e.g. `make packages PKG="inputplumber pocknix-bsp-sm8550"` to force just those two.
   local want=("$@")
   mkdir -p "${LOCALREPO}" "${LOCALREPO_SHARED}"
+  clear_stale_repo_locks
   setup_chroot
 
   chroot_mount "${BROOT}"

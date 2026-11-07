@@ -25,7 +25,7 @@
 pkgname=gamescope
 epoch=1
 pkgver=3.16.31.ogc1.20260928.afd6eac6
-pkgrel=3
+pkgrel=1
 _commit=afd6eac6e1b5045119831b63854bad68ec4fd92c
 install=gamescope.install
 pkgdesc="SteamOS session compositing WM — OGC base + armada HDR patches (msm/rotated panels)"

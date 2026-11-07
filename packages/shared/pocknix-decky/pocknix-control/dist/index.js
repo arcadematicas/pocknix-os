@@ -1,4 +1,4 @@
-const manifest = {"name":"Pocknix Control"};
+const manifest = {"name":"CalvOS Control"};
 const API_VERSION = 2;
 const internalAPIConnection = window.__DECKY_SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED_deckyLoaderAPIInit;
 if (!internalAPIConnection) {
@@ -25,6 +25,7 @@ const definePlugin = (fn) => {
 };
 
 const getConfig = () => call("get_config");
+const sendReport = (text, kind, areas) => call("send_report", text, kind, areas);
 const setScxScheduler = (scheduler) => call("set_scx_scheduler", scheduler);
 const setScxMode = (mode) => call("set_scx_mode", mode);
 const saveTweaks = (data) => call("save_tweaks", data);
@@ -316,6 +317,19 @@ function Cleanup() {
                                     : "Marca alguna categoría", onClick: run, children: "Limpiar seleccionadas" }) }), message ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "", description: message }) })) : null, error ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Error", description: error }) })) : null] }), biggest.length > 0 && (SP_JSX.jsx(DFL.PanelSection, { title: "QU\u00C9 OCUPA M\u00C1S", children: biggest.map((entry) => (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: human(entry.size), description: entry.path.replace(/^\/home\/[^/]+/, "~") }) }, entry.path))) }))] }));
 }
 
+// Areas del informe. "logs" es la pesada: apagada por defecto para que enviar sea rapido.
+const AREAS = [
+    ["sistema", "Sistema", "kernel, BSP, versiones, bateria, termicas"],
+    ["energia", "Energia y ventilador", "perfil, governor, limites, curva"],
+    ["audio", "Audio", "sinks, UCM, amplificadores, jack"],
+    ["mando", "Mando", "inputplumber, compuesto, calibracion"],
+    ["fex", "FEX", "version, binfmt, rootfs"],
+    ["wproton", "wproton / Proton", "version, prefijos, herramientas"],
+    ["emulacion", "Emulacion", "DeckStation, RetroArch, apps"],
+    ["qam", "QAM / Decky", "plugins, loader, errores"],
+    ["red", "Red", "wifi, direcciones, DNS, MTU"],
+    ["logs", "Logs largos", "journal y dmesg completos (pesa)"],
+];
 const voltios = (uv) => (uv == null ? null : `${(uv / 1000000).toFixed(2)} V`);
 const amperios = (ua) => (ua == null ? null : `${(ua / 1000000).toFixed(2)} A`);
 // NOTA: aqui NO hay selector de perfil de potencia ni control de brillo A PROPOSITO.
@@ -331,6 +345,16 @@ const amperios = (ua) => (ua == null ? null : `${(ua / 1000000).toFixed(2)} A`);
 function System() {
     const [status, setStatus] = SP_REACT.useState(null);
     const [error, setError] = SP_REACT.useState("");
+    const [texto, setTexto] = SP_REACT.useState("");
+    const [enviando, setEnviando] = SP_REACT.useState(false);
+    const [informe, setInforme] = SP_REACT.useState(null);
+    const [kind, setKind] = SP_REACT.useState("bug");
+    const [areas, setAreas] = SP_REACT.useState(() => {
+        const on = {};
+        for (const [id] of AREAS)
+            on[id] = id !== "logs";
+        return on;
+    });
     SP_REACT.useEffect(() => {
         systemStatus()
             .then(setStatus)
@@ -342,7 +366,20 @@ function System() {
             .filter(Boolean)
             .join(" · ")
         : "no disponible en este equipo";
-    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "BATER\u00CDA", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: b?.capacity != null ? `${b.capacity}%` : "…", description: detalle || "…" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "", description: "El perfil de potencia est\u00E1 en el men\u00FA de Steam (\u22EF \u2192 Rendimiento). El brillo, en los controles nativos." }) })] }), error ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Error", description: error }) })) : null] }));
+    const enviarInforme = async () => {
+        setEnviando(true);
+        setInforme(null);
+        try {
+            setInforme(await sendReport(texto, kind, Object.keys(areas).filter((k) => areas[k])));
+        }
+        catch (err) {
+            setInforme({ ok: false, error: String(err) });
+        }
+        finally {
+            setEnviando(false);
+        }
+    };
+    return (SP_JSX.jsxs(SP_JSX.Fragment, { children: [SP_JSX.jsxs(DFL.PanelSection, { title: "BATER\u00CDA", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: b?.capacity != null ? `${b.capacity}%` : "…", description: detalle || "…" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "", description: "El perfil de potencia est\u00E1 en el men\u00FA de Steam (\u22EF \u2192 Rendimiento). El brillo, en los controles nativos." }) })] }), error ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "Error", description: error }) })) : null, SP_JSX.jsxs(DFL.PanelSection, { title: "INFORME", children: [SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { description: "Que quieres mandar:" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Button, { onClick: () => setKind("bug"), children: (kind === "bug" ? "● " : "○ ") + "Reportar un problema" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Button, { onClick: () => setKind("idea"), children: (kind === "idea" ? "● " : "○ ") + "Sugerir una mejora" }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { description: "Que incluyo:" }) }), AREAS.map(([id, label, desc]) => (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: label, description: desc, checked: !!areas[id], onChange: (v) => setAreas({ ...areas, [id]: v }) }) }, id))), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.TextField, { label: "Descripcion (opcional)", value: texto, onChange: (e) => setTexto(e.target.value) }) }), SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Button, { onClick: enviarInforme, disabled: enviando || !Object.values(areas).some(Boolean), children: enviando ? "Enviando..." : "Enviar informe" }) }), informe ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: informe.ok ? "Informe enviado" : "No se pudo enviar", description: informe.ok ? (informe.issue || "") : [informe.error, informe.detail].filter(Boolean).join(" — ") }) })) : null, SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.Field, { label: "", description: "Se envia a nuestro GitHub (arcadematicas/calvOS-reports). El informe se redacta antes de salir: sin rutas de usuario, hostname, IP, MAC ni claves." }) })] })] }));
 }
 
 // Drives the same state as Steam's own per-game compatibility dropdown (SpecifyCompatTool +
@@ -1031,7 +1068,7 @@ function FileSharing() {
         if (!share.installed)
             return "Samba is not installed (7.4 MB download)";
         if (share.on)
-            return "On - open smb://pocknix.local and connect as Guest";
+            return "On - open smb://calvos.local and connect as Guest";
         return "Off - your home folder is not shared";
     };
     return (SP_JSX.jsxs(DFL.PanelSection, { title: "FILE SHARING", children: [SP_JSX.jsx(DFL.Field, { label: "Network share", description: summary() }), share && !share.installed ? (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ButtonItem, { layout: "below", disabled: busy, onClick: () => run(installSamba), children: busy ? "Installing…" : "Install Samba" }) })) : (SP_JSX.jsx(DFL.PanelSectionRow, { children: SP_JSX.jsx(DFL.ToggleField, { label: "Share my home folder", description: "Drag files straight onto the device from another computer", checked: !!share?.on, disabled: busy || !share?.installed, onChange: (on) => {
@@ -1486,7 +1523,7 @@ function Content() {
     }, [!!config]);
     useDebouncedSave({ config, field: "tweaks", snapshot: savedTweaksSnapshot, save: saveTweaks, setConfig, onError: load });
     if (!config)
-        return SP_JSX.jsx(DFL.PanelSection, { title: "Pocknix Control", children: SP_JSX.jsx(DFL.Field, { label: message }) });
+        return SP_JSX.jsx(DFL.PanelSection, { title: "CalvOS Control", children: SP_JSX.jsx(DFL.Field, { label: message }) });
     const tabContent = (content) => (SP_JSX.jsx("div", { className: "pocknix-control-tab-content", children: content }));
     const tabs = [
         { id: "Games", title: tabIcons.Games, content: tabContent(SP_JSX.jsx(Games, { config: config, setConfig: setConfig, reload: load })) },
@@ -1579,7 +1616,7 @@ function patchLibraryContextMenu() {
                     return ret;
                 if (children.some((child) => child?.key === "pocknix-settings"))
                     return ret;
-                children.push(SP_JSX.jsx(DFL.MenuItem, { onSelected: () => DFL.showModal(SP_JSX.jsx(GameSettingsModal, { appid: String(appid), name: String(overview?.display_name ?? "") })), children: "Pocknix Settings" }, "pocknix-settings"));
+                children.push(SP_JSX.jsx(DFL.MenuItem, { onSelected: () => DFL.showModal(SP_JSX.jsx(GameSettingsModal, { appid: String(appid), name: String(overview?.display_name ?? "") })), children: "CalvOS Settings" }, "pocknix-settings"));
             }
             catch (error) { }
             return ret;
@@ -1651,7 +1688,7 @@ function registerQamTab(content, icon) {
         const staticClasses = DFL?.staticClasses;
         hook.add({
             id: TAB_ID,
-            title: SP_JSX.jsx("div", { className: staticClasses?.Title, children: "Pocknix Control" }),
+            title: SP_JSX.jsx("div", { className: staticClasses?.Title, children: "CalvOS Control" }),
             content,
             icon,
             __pkcOwner: OWNER,
@@ -1710,24 +1747,6 @@ function startQamTabWatchdog(content, icon) {
         }
     };
     tick();
-    // Diagnostico (solo los primeros ticks): que hay en window para depurar.
-    let diag = 0;
-    const diagTick = () => {
-        if (cancelled || diag >= 5)
-            return;
-        diag += 1;
-        try {
-            const w = window;
-            const hook = w.__TABS_HOOK_INSTANCE;
-            const globals = Object.keys(w).filter((k) => /tab|decky/i.test(k)).slice(0, 12);
-            console.log(`[PocknixControl] qam diag ${diag}: hook=${!!hook} tabs=${hook?.tabs?.length ?? "n/a"} globals=${JSON.stringify(globals)}`);
-        }
-        catch (e) {
-            console.log("[PocknixControl] qam diag error", String(e));
-        }
-    };
-    diagTick();
-    window.setInterval(diagTick, 2000);
     const interval = window.setInterval(tick, 2000);
     return () => {
         cancelled = true;
@@ -1743,7 +1762,7 @@ var index = definePlugin(() => {
     // de Decky como siempre.
     const stopQamWatchdog = startQamTabWatchdog(SP_JSX.jsx(Content, {}), tabIcon);
     return {
-        name: "Pocknix Control",
+        name: "CalvOS Control",
         content: SP_JSX.jsx(Content, {}),
         icon: tabIcon,
         alwaysRender: true,
