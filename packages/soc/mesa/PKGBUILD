@@ -12,7 +12,7 @@ pkgver=26.3.0
 # El commit fija el snapshot para que el build sea reproducible (mismo criterio que
 # pocknix-turnip-arm con su _develcommit).
 _srcver=aa35464ee50c1311eb6cebb9882d02738642b692
-pkgrel=1
+pkgrel=2
 pkgdesc="Mesa 26.3.0-devel trimmed for the RP6/SM8550: freedreno GL + turnip Vulkan, cortex-x3 tuned"
 arch=('aarch64')
 url="https://www.mesa3d.org/"
