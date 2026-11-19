@@ -1,9 +1,8 @@
 #!/bin/bash
 # format-device.sh — pkexec'd as root by steamos-format-device when the Storage UI formats a card.
-# mmcblk ONLY: Valve's original also accepts /dev/sd[a-z], but on the RP6 `sda` is the INTERNAL UFS
-# OS disk. Owner is stamped 1000:1000 (SteamOS's deck, not our local 1001) so a fresh card stays
-# writable on a genuine SteamOS device; sdcard-mount.sh's idmap presents it back as 1001 here.
-# Derived from Valve jupiter-hw-support's /usr/lib/hwsupport/format-device.sh.
+# mmcblk ONLY, never /dev/sd[a-z]: on the RP6 `sda` is the INTERNAL UFS OS disk. Owner is
+# stamped 1000:1000 (SteamOS's deck, not our local 1001) so a fresh card stays writable on a
+# genuine SteamOS device; sdcard-mount.sh's idmap presents it back as 1001 here.
 
 set -uo pipefail
 
@@ -67,8 +66,8 @@ for mp in $(lsblk -nro NAME "$DISK" | tail -n +2); do
     umount -l "/dev/${mp}" 2>/dev/null || true
 done
 
-# A service in a private mount ns (e.g. Decky's loader) keeps an inherited copy of the mount and
-# holds the device busy; the init-ns umount above does not propagate into private namespaces.
+# A service in a private mount ns keeps an inherited copy of the mount and holds the device
+# busy; the init-ns umount above does not propagate into private namespaces.
 declare -A ns_seen
 for proc in /proc/[0-9]*; do
     ns="$(readlink "${proc}/ns/mnt" 2>/dev/null)" || continue

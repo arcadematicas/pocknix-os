@@ -3,8 +3,8 @@
 set -u
 
 CONF=/etc/pocknix/gamepad-calibration.conf
-
-[ -r "${CONF}" ] || exit 0
+# Probe-time values for `pocknix-gamepad-calibration reset`; per board (devicetree overrides at probe).
+DEFAULTS=/run/pocknix/gamepad-calibration.defaults
 
 # sm8250 loads its gamepad driver as a module on device probe, so the parameters
 # can appear after this unit is ordered to run.
@@ -24,6 +24,18 @@ if [ -z "${params}" ]; then
   exit 0
 fi
 
+# Only once per boot: a unit restart after a replay must not snapshot calibrated values.
+if [ ! -e "${DEFAULTS}" ]; then
+  mkdir -p "${DEFAULTS%/*}"
+  for f in "${params}"/axis_*_* "${params}"/trigger_*_*; do
+    case "${f##*/}" in
+      *_max|*_min|*_center|*_deadzone|*_antideadzone) printf '%s=%s\n' "${f##*/}" "$(cat "${f}")" ;;
+    esac
+  done > "${DEFAULTS}.tmp" && mv "${DEFAULTS}.tmp" "${DEFAULTS}"
+fi
+
+[ -r "${CONF}" ] || exit 0
+
 applied=0
 while IFS='=' read -r key value; do
   key="${key%%[[:space:]]*}"
@@ -41,6 +53,13 @@ while IFS='=' read -r key value; do
   fi
 done < "${CONF}"
 
-# The driver only picks up the new values when told to re-read them.
-[ "${applied}" = "1" ] && printf '1' > "${params}/update_params"
+[ "${applied}" = "1" ] || exit 0
+# The driver clears the flag once its new ranges are live; InputPlumber must not open the pad
+# before that. 1 s, as REREAD_S in pocknix-gamepad-calibration.
+printf '1' > "${params}/update_params"
+for _ in $(seq 1 50); do
+  [ "$(cat "${params}/update_params" 2>/dev/null)" = 0 ] && exit 0
+  sleep 0.02
+done
+echo "driver did not re-read its parameters; ranges may be stale this boot" >&2
 exit 0
