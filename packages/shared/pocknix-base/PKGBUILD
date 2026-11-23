@@ -11,7 +11,7 @@ pkgver=0.2.0
 # 7: pkgrel 6 was published with SELF/PACMAN pointing at a local test harness (the paths
 #    got rewritten by a sed before the file was shipped). Same filename, different bytes:
 #    never republish those, clients cache by filename. Fixed + trailing newline restored.
-pkgrel=7
+pkgrel=10
 pkgdesc="Locked/rolling base mode switch and desktop updater for pocknix"
 arch=('any')
 url="https://github.com/shuuri-labs/pocknix-os"

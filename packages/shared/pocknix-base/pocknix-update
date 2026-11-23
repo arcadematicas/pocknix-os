@@ -181,7 +181,7 @@ if [ "$noninteractive" = 1 ]; then
   exit 1
 fi
 
-echo "Pocknix Updater"
+echo "CalvOS Updater"
 echo "This refreshes the package database and installs all available updates."
 echo
 read -rp "Check for updates now? [y/N]: " a
