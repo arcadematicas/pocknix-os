@@ -56,6 +56,13 @@ QQC2.ApplicationWindow {
         toaster.show(title, text)
     }
 
+    // El dialogo de confirmacion es interno; la navegacion con mando lo necesita desde fuera.
+    readonly property bool dialogOpen: askSheet.opened
+    function closeDialog() {
+        if (askSheet.opened)
+            askSheet.close()
+    }
+
     // Only the TabPage children are pages: a Repeater making them sits among them.
     readonly property var tabPages: Array.from(stack.children).filter(c => c instanceof TabPage)
 

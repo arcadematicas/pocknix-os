@@ -20,6 +20,9 @@ Sheet {
         accepted()
     }
 
+    // Con mando: al abrir, el boton de confirmar ya tiene el foco (A = aceptar, B = cerrar).
+    onOpened: Qt.callLater(() => confirm.forceActiveFocus())
+
     maxWidth: Theme.unit * 30
 
     contentItem: ColumnLayout {
