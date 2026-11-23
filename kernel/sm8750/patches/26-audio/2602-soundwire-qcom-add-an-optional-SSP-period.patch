@@ -1,0 +1,223 @@
+--- orig/drivers/soundwire/qcom.c	2026-11-23 06:41:41.069331495 +0100
++++ new/drivers/soundwire/qcom.c	2026-11-23 06:41:41.071727567 +0100
+@@ -76,40 +76,41 @@
+ #define SWRM_V1_3_CMD_FIFO_RD_CMD				0x304
+ #define SWRM_V2_0_CMD_FIFO_RD_CMD				0x5024
+ #define SWRM_CMD_FIFO_CMD					0x308
+ #define SWRM_CMD_FIFO_FLUSH					0x1
+ #define SWRM_V1_3_CMD_FIFO_STATUS				0x30C
+ #define SWRM_V2_0_CMD_FIFO_STATUS				0x5050
+ #define SWRM_RD_CMD_FIFO_CNT_MASK				GENMASK(20, 16)
+ #define SWRM_WR_CMD_FIFO_CNT_MASK				GENMASK(12, 8)
+ #define SWRM_CMD_FIFO_CFG_ADDR					0x314
+ #define SWRM_CONTINUE_EXEC_ON_CMD_IGNORE			BIT(31)
+ #define SWRM_RD_WR_CMD_RETRIES					0x7
+ #define SWRM_V1_3_CMD_FIFO_RD_FIFO_ADDR				0x318
+ #define SWRM_V2_0_CMD_FIFO_RD_FIFO_ADDR				0x5040
+ #define SWRM_RD_FIFO_CMD_ID_MASK				GENMASK(11, 8)
+ #define SWRM_ENUMERATOR_CFG_ADDR				0x500
+ #define SWRM_ENUMERATOR_SLAVE_DEV_ID_1(m)		(0x530 + 0x8 * (m))
+ #define SWRM_ENUMERATOR_SLAVE_DEV_ID_2(m)		(0x534 + 0x8 * (m))
+ #define SWRM_MCP_FRAME_CTRL_BANK_ADDR(m)		(0x101C + 0x40 * (m))
+ #define SWRM_MCP_FRAME_CTRL_BANK_COL_CTRL_BMSK			GENMASK(2, 0)
+ #define SWRM_MCP_FRAME_CTRL_BANK_ROW_CTRL_BMSK			GENMASK(7, 3)
++#define SWRM_MCP_FRAME_CTRL_BANK_SSP_PERIOD_MASK		GENMASK(23, 16)
+ #define SWRM_MCP_BUS_CTRL					0x1044
+ #define SWRM_MCP_BUS_CLK_START					BIT(1)
+ #define SWRM_MCP_CFG_ADDR					0x1048
+ #define SWRM_MCP_CFG_MAX_NUM_OF_CMD_NO_PINGS_BMSK		GENMASK(21, 17)
+ #define SWRM_DEF_CMD_NO_PINGS					0x1f
+ #define SWRM_MCP_STATUS						0x104C
+ #define SWRM_MCP_STATUS_BANK_NUM_MASK				BIT(0)
+ #define SWRM_MCP_SLV_STATUS					0x1090
+ #define SWRM_MCP_SLV_STATUS_MASK				GENMASK(1, 0)
+ #define SWRM_MCP_SLV_STATUS_SZ					2
+ 
+ #define SWRM_DPn_PORT_CTRL_BANK(offset, n, m)	(offset + 0x100 * (n - 1) + 0x40 * m)
+ #define SWRM_DPn_PORT_CTRL_2_BANK(offset, n, m)	(offset + 0x100 * (n - 1) + 0x40 * m)
+ #define SWRM_DPn_BLOCK_CTRL_1(offset, n)	(offset + 0x100 * (n - 1))
+ #define SWRM_DPn_BLOCK_CTRL2_BANK(offset, n, m)	(offset + 0x100 * (n - 1) + 0x40 * m)
+ #define SWRM_DPn_PORT_HCTRL_BANK(offset,  n, m)	(offset + 0x100 * (n - 1) + 0x40 * m)
+ #define SWRM_DPn_BLOCK_CTRL3_BANK(offset, n, m)	(offset + 0x100 * (n - 1) + 0x40 * m)
+ #define SWRM_DPn_SAMPLECTRL2_BANK(offset, n, m)	(offset + 0x100 * (n - 1) + 0x40 * m)
+ #define SWRM_DOUT_DP_PCM_PORT_CTRL(n)		(0x1054 + 0x100 * n)
+ 
+@@ -194,40 +195,41 @@
+ 	const unsigned int *reg_layout;
+ 	void __iomem *mmio;
+ 	struct reset_control *audio_cgcr;
+ #ifdef CONFIG_DEBUG_FS
+ 	struct dentry *debugfs;
+ #endif
+ 	struct completion broadcast;
+ 	struct completion enumeration;
+ 	/* Port alloc/free lock */
+ 	struct mutex port_lock;
+ 	struct clk *hclk;
+ 	int irq;
+ 	unsigned int version;
+ 	int wake_irq;
+ 	int num_din_ports;
+ 	int num_dout_ports;
+ 	int nports;
+ 	int cols_index;
+ 	int rows_index;
+ 	u32 pcm_ports_mask;
++	u32 ssp_period;
+ 	unsigned long port_mask;
+ 	u32 intr_mask;
+ 	u8 rcmd_id;
+ 	u8 wcmd_id;
+ 	/* Port numbers are 1 - 14 */
+ 	struct qcom_swrm_port_config *pconfig;
+ 	struct sdw_stream_runtime *sruntime[SWRM_MAX_DAIS];
+ 	enum sdw_slave_status status[SDW_MAX_DEVICES + 1];
+ 	int (*reg_read)(struct qcom_swrm_ctrl *ctrl, int reg, u32 *val);
+ 	int (*reg_write)(struct qcom_swrm_ctrl *ctrl, int reg, int val);
+ 	u32 slave_status;
+ 	u32 wr_fifo_depth;
+ 	bool clock_stop_not_supported;
+ };
+ 
+ struct qcom_swrm_data {
+ 	u32 default_cols;
+ 	u32 default_rows;
+ 	bool sw_clk_gate_required;
+ 	u32 max_reg;
+@@ -869,40 +871,43 @@
+ 			       &comp_sts);
+ 		if (comp_sts & SWRM_FRM_GEN_ENABLED)
+ 			return true;
+ 
+ 		usleep_range(500, 510);
+ 	} while (retry--);
+ 
+ 	dev_err(ctrl->dev, "%s: link status not %s\n", __func__,
+ 		comp_sts & SWRM_FRM_GEN_ENABLED ? "connected" : "disconnected");
+ 
+ 	return false;
+ }
+ 
+ static int qcom_swrm_init(struct qcom_swrm_ctrl *ctrl)
+ {
+ 	u32 val;
+ 
+ 	/* Clear Rows and Cols */
+ 	val = FIELD_PREP(SWRM_MCP_FRAME_CTRL_BANK_ROW_CTRL_BMSK, ctrl->rows_index);
+ 	val |= FIELD_PREP(SWRM_MCP_FRAME_CTRL_BANK_COL_CTRL_BMSK, ctrl->cols_index);
++	if (ctrl->ssp_period)
++		val |= FIELD_PREP(SWRM_MCP_FRAME_CTRL_BANK_SSP_PERIOD_MASK,
++				  ctrl->ssp_period - 1);
+ 
+ 	reset_control_reset(ctrl->audio_cgcr);
+ 
+ 	ctrl->reg_write(ctrl, SWRM_MCP_FRAME_CTRL_BANK_ADDR(0), val);
+ 
+ 	/* Enable Auto enumeration */
+ 	ctrl->reg_write(ctrl, SWRM_ENUMERATOR_CFG_ADDR, 1);
+ 
+ 	ctrl->intr_mask = SWRM_INTERRUPT_STATUS_RMSK;
+ 	/* Mask soundwire interrupts */
+ 	if (ctrl->version < SWRM_VERSION_2_0_0)
+ 		ctrl->reg_write(ctrl, ctrl->reg_layout[SWRM_REG_INTERRUPT_MASK_ADDR],
+ 				SWRM_INTERRUPT_STATUS_RMSK);
+ 
+ 	/* Configure No pings */
+ 	ctrl->reg_read(ctrl, SWRM_MCP_CFG_ADDR, &val);
+ 	u32p_replace_bits(&val, SWRM_DEF_CMD_NO_PINGS, SWRM_MCP_CFG_MAX_NUM_OF_CMD_NO_PINGS_BMSK);
+ 	ctrl->reg_write(ctrl, SWRM_MCP_CFG_ADDR, val);
+ 
+ 	if (ctrl->version == SWRM_VERSION_1_7_0) {
+@@ -996,40 +1001,43 @@
+ 							msg->dev_num,
+ 						       msg->addr + i);
+ 			if (ret)
+ 				return SDW_CMD_IGNORED;
+ 		}
+ 	}
+ 
+ 	return SDW_CMD_OK;
+ }
+ 
+ static int qcom_swrm_pre_bank_switch(struct sdw_bus *bus)
+ {
+ 	u32 reg = SWRM_MCP_FRAME_CTRL_BANK_ADDR(bus->params.next_bank);
+ 	struct qcom_swrm_ctrl *ctrl = to_qcom_sdw(bus);
+ 	u32 val;
+ 
+ 	ctrl->reg_read(ctrl, reg, &val);
+ 
+ 	u32p_replace_bits(&val, ctrl->cols_index, SWRM_MCP_FRAME_CTRL_BANK_COL_CTRL_BMSK);
+ 	u32p_replace_bits(&val, ctrl->rows_index, SWRM_MCP_FRAME_CTRL_BANK_ROW_CTRL_BMSK);
++	if (ctrl->ssp_period)
++		u32p_replace_bits(&val, ctrl->ssp_period - 1,
++				  SWRM_MCP_FRAME_CTRL_BANK_SSP_PERIOD_MASK);
+ 
+ 	return ctrl->reg_write(ctrl, reg, val);
+ }
+ 
+ static int qcom_swrm_port_params(struct sdw_bus *bus,
+ 				 struct sdw_port_params *p_params,
+ 				 unsigned int bank)
+ {
+ 	struct qcom_swrm_ctrl *ctrl = to_qcom_sdw(bus);
+ 	u32 offset = ctrl->reg_layout[SWRM_OFFSET_DP_BLOCK_CTRL_1];
+ 
+ 	return ctrl->reg_write(ctrl, SWRM_DPn_BLOCK_CTRL_1(offset, p_params->num),
+ 				p_params->bps - 1);
+ }
+ 
+ /*
+  * Ports carrying PCM samples (e.g. the WCD939x HIFI_PCM headphone port)
+  * additionally need the controller's per-port PCM format enable
+  * (SWRM_DOUT_DP_PCM_PORT_CTRL) set; PDM ports don't care. Mainline has no
+  * binding for per-port stream type yet, so take the port set from an
+@@ -1445,40 +1453,48 @@
+ 	struct qcom_swrm_port_config *pcfg;
+ 	int i, ret, val;
+ 
+ 	ctrl->reg_read(ctrl, SWRM_COMP_PARAMS, &val);
+ 
+ 	ctrl->num_dout_ports = FIELD_GET(SWRM_COMP_PARAMS_DOUT_PORTS_MASK, val);
+ 	ctrl->num_din_ports = FIELD_GET(SWRM_COMP_PARAMS_DIN_PORTS_MASK, val);
+ 
+ 	ret = of_property_read_u32(np, "qcom,din-ports", &val);
+ 	if (!ret) { /* only if present */
+ 		if (val != ctrl->num_din_ports) {
+ 			dev_err(ctrl->dev, "din-ports (%d) mismatch with controller (%d)",
+ 				val, ctrl->num_din_ports);
+ 		}
+ 
+ 		ctrl->num_din_ports = val;
+ 	}
+ 
+ 	of_property_read_u32(np, "qcom,pcm-ports-mask", &ctrl->pcm_ports_mask);
+ 
++	if (of_property_present(np, "qcom,ssp-period")) {
++		ret = of_property_read_u32(np, "qcom,ssp-period", &ctrl->ssp_period);
++		if (ret)
++			return ret;
++		if (!ctrl->ssp_period || ctrl->ssp_period > 256)
++			return dev_err_probe(ctrl->dev, -EINVAL, "Invalid SSP period\n");
++	}
++
+ 	ret = of_property_read_u32(np, "qcom,dout-ports", &val);
+ 	if (!ret) { /* only if present */
+ 		if (val != ctrl->num_dout_ports) {
+ 			dev_err(ctrl->dev, "dout-ports (%d) mismatch with controller (%d)",
+ 				val, ctrl->num_dout_ports);
+ 		}
+ 
+ 		ctrl->num_dout_ports = val;
+ 	}
+ 
+ 	ctrl->nports = ctrl->num_dout_ports + ctrl->num_din_ports;
+ 
+ 	ctrl->pconfig = devm_kcalloc(ctrl->dev, ctrl->nports + 1,
+ 					sizeof(*ctrl->pconfig), GFP_KERNEL);
+ 	if (!ctrl->pconfig)
+ 		return -ENOMEM;
+ 
+ 	set_bit(0, &ctrl->port_mask);
+ 	/* Valid port numbers are from 1, so mask out port 0 explicitly */
+ 	for (i = 0; i < ctrl->nports; i++) {
