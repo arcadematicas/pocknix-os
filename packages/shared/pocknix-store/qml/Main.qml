@@ -5,7 +5,7 @@ import Pocknix.Ui
 
 AppWindow {
     id: app
-    title: qsTr("Pocknix Store")
+    title: qsTr("CalvOS Store")
 
     readonly property string cli: "/usr/bin/pocknix-store"
     readonly property string romsInit: "/usr/bin/pocknix-roms-init"
@@ -14,6 +14,8 @@ AppWindow {
     property bool loaded: false
     property string loadError: ""
     property bool attached: false
+    // Aviso de terceros: una sola vez por sesion, al entrar en AppImages.
+    property bool appimagesWarned: false
     // what the running store job works on: its tiles show busy
     property var acting: []
     property string actingKind: ""
@@ -28,7 +30,8 @@ AppWindow {
     readonly property var sectionIcons: ({
         emulation: "input-gamepad-symbolic", compatibility: "system-run-symbolic",
         network: "network-vpn-symbolic", streaming: "media-playback-start-symbolic",
-        desktop: "monitor-symbolic"
+        desktop: "monitor-symbolic", tools: "applications-utilities-symbolic",
+        appimages: "application-x-executable-symbolic"
     })
 
     function refresh() {
@@ -46,14 +49,51 @@ AppWindow {
         return inSection(section).filter(e => e.installed && e.tile)
     }
 
+    function padPage() { return pagesRepeater.itemAt(currentIndex) }
+    function padPressed(key) {
+        const page = padPage()
+        if (!page) return
+        const inSheet = dialogOpen || sheet.opened
+        if (key === Qt.Key_Escape) {
+            if (dialogOpen)
+                closeDialog()
+            else if (sheet.opened)
+                sheet.close()
+            return
+        }
+        if (key === Qt.Key_Return || key === Qt.Key_Space) {
+            const item = activeFocusItem
+            if (item && item.clicked)
+                item.clicked()
+            return
+        }
+        if (inSheet) {
+            if (key === Qt.Key_Left || key === Qt.Key_Right || key === Qt.Key_Up || key === Qt.Key_Down) {
+                const cur = activeFocusItem
+                if (cur && cur.nextItemInFocusChain) {
+                    const forward = (key === Qt.Key_Right || key === Qt.Key_Down)
+                    cur.nextItemInFocusChain(forward).forceActiveFocus()
+                }
+            }
+            return
+        }
+        if (key === Qt.Key_PageUp) { currentIndex = Math.max(0, currentIndex - 1); return }
+        if (key === Qt.Key_PageDown) { currentIndex = Math.min(Math.max(0, sections.length - 1), currentIndex + 1); return }
+        if (key === Qt.Key_Left || key === Qt.Key_Right || key === Qt.Key_Up || key === Qt.Key_Down) {
+            if (page.padNav) page.padNav(key)
+        }
+    }
 
     function act(kind, ids, title) {
         if (actionJob.running)
             return
+        // AppMan instala en la carpeta del usuario: ni pkexec ni trabajos de pacman.
+        const appman = ids.length > 0 && (kind === "install" || kind === "remove")
+            && ids.every(id => { const e = entry(id); return e && e.section === "appimages" })
         acting = ids
         actingKind = kind
         log.title = title
-        actionJob.start([cli, kind].concat(ids), { root: true })
+        actionJob.start([cli, kind].concat(ids), { root: !appman })
         log.open()
     }
 
@@ -74,7 +114,7 @@ AppWindow {
             text: (emulation && store.mode === "all" ? qsTr("The other emulators stay installed. ") : "")
                 + (emulation ? qsTr("Close it first. Its Steam tile is removed too. Your ROMs, saves and settings are kept.")
                    : e.section === "compatibility" ? qsTr("Any game set to use %1 will need a different compatibility tool in Steam.").arg(e.name)
-                   : e.section === "desktop" ? qsTr("If desktop mode uses it, pick another desktop in Pocknix Tools first.")
+                   : e.section === "desktop" ? qsTr("If desktop mode uses it, pick another desktop in CalvOS Tools first.")
                    : qsTr("You can install it again at any time.")),
             confirmText: qsTr("Remove"),
             danger: true,
@@ -126,7 +166,7 @@ AppWindow {
                     if (JSON.stringify(app.store.sections) !== JSON.stringify(app.sections))
                         app.sections = app.store.sections
                 } catch (e) {
-                    app.loadError = qsTr("pocknix-store gave a reply the Store cannot read.")
+                    app.loadError = qsTr("CalvOS Store received a reply it cannot read.")
                 }
             }
             app.loaded = true
@@ -213,6 +253,7 @@ AppWindow {
     // One page per section. Until the status is in (or when it lists nothing) a single page
     // holds the message, so the rail stays hidden.
     Repeater {
+        id: pagesRepeater
         model: app.sections.length > 0 ? app.sections : [{ id: "", name: qsTr("Store") }]
 
         TabPage {
@@ -223,6 +264,45 @@ AppWindow {
 
             title: modelData.name
             icon: app.sectionIcons[modelData.id] || "applications-other-symbolic"
+
+            // Navegacion con mando/teclado: las flechas mueven el foco por la rejilla y
+            // Enter/Espacio activan el tile (ya lo trae Tile). No toca el host de la UI.
+            function navTiles() {
+                return grid.children.filter(c => c && c.visible && c.title !== undefined
+                                                 && c.activeFocusOnTab)
+            }
+            function navFocus(idx) {
+                const tiles = navTiles()
+                if (tiles.length === 0)
+                    return false
+                const i = Math.max(0, Math.min(tiles.length - 1, idx))
+                tiles[i].forceActiveFocus()
+                return true
+            }
+            function navKey(idx, key) {
+                const tiles = navTiles()
+                if (tiles.length === 0)
+                    return false
+                const cols = Math.max(1, grid.columns)
+                let n = idx
+                if (key === Qt.Key_Left)        n = idx - 1
+                else if (key === Qt.Key_Right)  n = idx + 1
+                else if (key === Qt.Key_Up)     n = idx - cols
+                else if (key === Qt.Key_Down)   n = idx + cols
+                else return false
+                if (n < 0 || n >= tiles.length)
+                    return false
+                tiles[n].forceActiveFocus()
+                return true
+            }
+            function padNav(key) {
+                const tiles = navTiles()
+                if (tiles.length === 0) return
+                const focused = tiles.indexOf(app.activeFocusItem)
+                if (focused < 0) { navFocus(0); return }
+                navKey(focused, key)
+            }
+            onVisibleChanged: if (visible) Qt.callLater(navFocus, 0)
 
             LoadState {
                 loading: !app.loaded
@@ -305,6 +385,7 @@ AppWindow {
             }
 
             GridLayout {
+                id: grid
                 Layout.fillWidth: true
                 columns: Math.max(1, Math.floor((width + columnSpacing) / (Theme.tileWidth + columnSpacing)))
                 columnSpacing: Theme.spacing
@@ -325,6 +406,10 @@ AppWindow {
                         checked: modelData.installed
                         busy: actionJob.running && (app.acting.includes(modelData.id)
                             || (app.actingKind.endsWith("-all") && section.emulation))
+                        Keys.onPressed: (event) => {
+                            if (section.navKey(index, event.key))
+                                event.accepted = true
+                        }
                         onClicked: {
                             sheet.entry = modelData
                             sheet.open()
@@ -358,6 +443,32 @@ AppWindow {
         }
     }
 
+    // RePag/AvPag cambian de seccion: es lo que mapean LB/RB en el perfil de mando.
+    Shortcut {
+        sequence: "PageUp"
+        onActivated: app.currentIndex = Math.max(0, app.currentIndex - 1)
+    }
+    Shortcut {
+        sequence: "PageDown"
+        onActivated: app.currentIndex = Math.min(Math.max(0, app.sections.length - 1),
+                                                 app.currentIndex + 1)
+    }
+    onCurrentIndexChanged: Qt.callLater(() => {
+        const page = pagesRepeater.itemAt(currentIndex)
+        if (page && page.navFocus)
+            page.navFocus(0)
+        const currentSection = app.sections[currentIndex]
+        if (currentSection && currentSection.id === "appimages" && !appimagesWarned) {
+            appimagesWarned = true
+            app.ask({
+                title: qsTr("AppImages de terceros"),
+                text: qsTr("Este catalogo viene de AppMan (AM). Son binarios AppImage de terceros, sin firmar y sin revisar por CalvOS: instala solo lo que conozcas. Cada app se instala en tu carpeta de usuario y puedes quitarla cuando quieras. Tu eres el responsable de lo que instales."),
+                confirmText: qsTr("Entiendo"),
+                notice: true
+            })
+        }
+    })
+
     EntrySheet {
         id: sheet
         locked: actionJob.running
@@ -371,5 +482,10 @@ AppWindow {
         id: log
         job: actionJob
         detached: true
+    }
+
+    Connections {
+        target: Pad
+        function onPressed(key) { app.padPressed(key) }
     }
 }
