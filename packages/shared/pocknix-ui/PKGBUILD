@@ -2,7 +2,7 @@
 # (arch=any) that loads on this host.
 pkgname=pocknix-ui
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="Pocknix touch UI host and components shared by Pocknix Tools and the Pocknix Store"
 arch=('aarch64')
 url="https://github.com/shuuri-labs/pocknix-os"

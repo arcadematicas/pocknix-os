@@ -39,6 +39,6 @@ qt_add_qml_module(pocknix-ui-host
     # Kirigami and the controls are system modules loaded at run time, not linked in.
     NO_IMPORT_SCAN
     QML_FILES ${QML_FILES}
-    SOURCES host/job.h host/job.cpp host/host.h)
+    SOURCES host/job.h host/job.cpp host/host.h host/pad.h host/pad.cpp)
 
 install(TARGETS pocknix-ui-host RUNTIME DESTINATION lib/pocknix-ui)
