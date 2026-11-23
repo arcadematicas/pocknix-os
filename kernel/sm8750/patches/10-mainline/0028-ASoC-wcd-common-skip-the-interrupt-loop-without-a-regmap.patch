@@ -1,0 +1,12 @@
+--- orig/sound/soc/codecs/wcd-common.c	2026-11-23 06:34:46.220223384 +0100
++++ new/sound/soc/codecs/wcd-common.c	2026-11-23 06:34:46.228159536 +0100
+@@ -128,6 +128,9 @@
+ 	struct regmap *regmap = dev_get_regmap(&slave->dev, NULL);
+ 	u32 sts1, sts2, sts3;
+ 
++	if (!regmap)
++		return 0;
++
+ 	do {
+ 		handle_nested_irq(irq_find_mapping(slave_irq, 0));
+ 		regmap_read(regmap, wcd_intr_status0, &sts1);
