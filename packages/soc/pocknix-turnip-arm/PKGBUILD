@@ -3,7 +3,7 @@
 # Counterpart of pocknix-turnip-x86; same per-SoC tuning contract as packages/soc/mesa.
 pkgname=pocknix-turnip-arm
 pkgver=20261106
-pkgrel=1
+pkgrel=2
 pkgdesc="Pinned aarch64 Turnip builds for per-game Mesa selection (SoC-tuned)"
 arch=('aarch64')
 url="https://www.mesa3d.org/"
@@ -23,6 +23,7 @@ _develcommit=5508b6e11905bf09122033ea755d7da809036189
 # The series mesa itself ships comes from its vk-arm payload; pinning mesa's pkgver here = file conflict.
 _versions=('25.0.7' '25.1.9' '25.2.8' '25.3.6' '26.0.8' '26.1.6' '27.0.0devel')
 source=('0001-c11-threads-fix-build-on-c23.patch'
+        '0019-tu-ir3-assume-speculatable-loads.patch'
         'https://archive.mesa3d.org/mesa-25.0.7.tar.xz'
         'https://archive.mesa3d.org/mesa-25.1.9.tar.xz'
         'https://archive.mesa3d.org/mesa-25.2.8.tar.xz'
@@ -31,6 +32,7 @@ source=('0001-c11-threads-fix-build-on-c23.patch'
         'https://archive.mesa3d.org/mesa-26.1.6.tar.xz'
         "https://gitlab.freedesktop.org/mesa/mesa/-/archive/${_develcommit}/mesa-${_develcommit}.tar.gz")
 sha256sums=('SKIP'
+            'SKIP'
             '592272df3cf01e85e7db300c449df5061092574d099da275d19e97ef0510f8a6'
             '412df33a1bb3c785ed698555a3972118a37c458e7accf6ae53f4bb87b3db454a'
             '097842f3e49d996868b38688db87b006f7d4541e93ce86d2f341d8b3e7be7c93'
@@ -56,6 +58,12 @@ prepare() {
     cd "${srcdir}/mesa-$(_srctag "$v")"
     if patch -Np1 --forward --dry-run -i "${srcdir}/0001-c11-threads-fix-build-on-c23.patch" >/dev/null 2>&1; then
       patch -Np1 --forward -i "${srcdir}/0001-c11-threads-fix-build-on-c23.patch"
+    fi
+    # Armada: treat descriptor loads as speculatable again (undoes the preamble cost of
+    # MR 42159 without reverting it). Only exists from 26.3 on, so the same dry-run guard
+    # keeps older series untouched. TU_DEBUG=strictspec restores upstream behaviour.
+    if patch -Np1 --forward --dry-run -i "${srcdir}/0019-tu-ir3-assume-speculatable-loads.patch" >/dev/null 2>&1; then
+      patch -Np1 --forward -i "${srcdir}/0019-tu-ir3-assume-speculatable-loads.patch"
     fi
   done
 }
