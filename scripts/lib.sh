@@ -185,8 +185,26 @@ render_base_pacman_conf() {
 [pocknix-base]
 SigLevel = Required DatabaseOptional
 Server = ${POCKNIX_BASE_URL}
+
+# ALARM fallback for BUILD-TIME tooling: makedepends such as cmake/ninja/llvm/lld
+# are not in the frozen base. [pocknix-base] is listed first, so every package the
+# base provides still comes from the base; only what the base lacks (build tools)
+# resolves here. Runtime libraries keep coming from the pin.
+[core]
+Include = /etc/pacman.d/mirrorlist
+
+[extra]
+Include = /etc/pacman.d/mirrorlist
+
+[alarm]
+Include = /etc/pacman.d/mirrorlist
 EOF
   else
-    cp -f "${CONFIG_DIR}/pacman.conf.in" "${out}"
+    # Live ALARM: keep only core/extra/alarm. The template's [pocknix]/
+    # [pocknix-shared] stanzas are the PUBLISHED repos (SigLevel = Required) and
+    # belong in the final image, not in the build: the build-time local repos are
+    # appended later with SigLevel = Never (append_local_repo). Leaving them here
+    # makes the first -Syu in a fresh chroot die on the pocknix signing key.
+    sed '/^\[pocknix\]$/,$d' "${CONFIG_DIR}/pacman.conf.in" > "${out}"
   fi
 }
