@@ -1,0 +1,63 @@
+From: CalvOS (diagnostico temporal)
+Subject: [PATCH] soundwire: stream: log the class-H port window
+
+El class-H (DP2 del wcd939x) queda mudo en la Odin 3 aunque los parches de Armada
+(0082/0083/0086) estan portados: el maestro manda hstart 3 / hstop 6 y el codec
+deberia leer HCtrl 0x36. Este parche NO cambia comportamiento: imprime la ventana
+calculada y relee DPN_HCtrl para comparar con Android/Armada.
+
+Quitar cuando el class-H este resuelto.
+---
+--- a/drivers/soundwire/stream.c	2026-11-24 08:38:31.354564365 +0100
++++ b/drivers/soundwire/stream.c	2026-11-24 08:38:31.354781483 +0100
+@@ -108,40 +108,50 @@
+ 	if (type != SDW_DPN_FULL)
+ 		return ret;
+ 
+ 	/* Program DPN_SampleCtrl2 register */
+ 	wbuf = FIELD_GET(SDW_DPN_SAMPLECTRL_HIGH, t_params->sample_interval - 1);
+ 
+ 	ret = sdw_write_no_pm(slave, addr3, wbuf);
+ 	if (ret < 0) {
+ 		dev_err(bus->dev, "DPN_SampleCtrl2 register write failed\n");
+ 		return ret;
+ 	}
+ 
+ 	/* Program DPN_HCtrl register */
+ 	wbuf = FIELD_PREP(SDW_DPN_HCTRL_HSTART, t_params->hstart);
+ 	wbuf |= FIELD_PREP(SDW_DPN_HCTRL_HSTOP, t_params->hstop);
+ 
+ 	ret = sdw_write_no_pm(slave, addr4, wbuf);
+ 	if (ret < 0)
+ 		dev_err(bus->dev, "DPN_HCtrl register write failed\n");
+ 
++	/* Calvos: diagnostico del puerto class-H (DP2). Armada mide HCtrl 0x36. */
++	if (t_params->port_num == 2) {
++		int rb = sdw_read_no_pm(slave, addr4);
++
++		dev_info(bus->dev,
++			 "clsh: port2 hstart=%u hstop=%u sinterval=%u blkpack=%u HCtrl_w=%#x HCtrl_rb=%d\n",
++			 t_params->hstart, t_params->hstop, t_params->sample_interval,
++			 t_params->blk_pkg_mode, wbuf, rb);
++	}
++
+ 	return ret;
+ }
+ 
+ static int sdw_program_slave_port_params(struct sdw_bus *bus,
+ 					 struct sdw_slave_runtime *s_rt,
+ 					 struct sdw_port_runtime *p_rt)
+ {
+ 	struct sdw_transport_params *t_params = &p_rt->transport_params;
+ 	struct sdw_port_params *p_params = &p_rt->port_params;
+ 	struct sdw_slave_prop *slave_prop = &s_rt->slave->prop;
+ 	u32 addr1, addr2, addr3, addr4, addr5, addr6;
+ 	enum sdw_dpn_type port_type;
+ 	bool read_only_wordlength;
+ 	int ret;
+ 	u8 wbuf;
+ 
+ 	if (s_rt->slave->is_mockup_device)
+ 		return 0;
+ 
+ 	if (t_params->port_num) {
