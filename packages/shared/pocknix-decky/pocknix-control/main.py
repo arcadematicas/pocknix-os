@@ -13,14 +13,17 @@ from pocknix_control.led import (restore_led, set_led, set_led_enabled, set_led_
 from pocknix_control.mako import mako_status
 from pocknix_control.modes import set_fan_mode, set_lavd_mode, set_scx_mode, set_scx_scheduler
 from pocknix_control.cleanup import clean, scan, biggest
+from pocknix_control.desktop import (desktop_flavour, set_desktop_flavour,
+                                     switch_to_desktop)
 from pocknix_control.system_info import system_status
 from pocknix_control.oled_care import oled_care_status, run_refresher
 from pocknix_control.hdr import hdr_status, set_hdr
 from pocknix_control.sdcard import detect_sdcard, format_sdcard
 from pocknix_control.sharing import install_samba, set_share, share_status
 from pocknix_control.snapshots import reboot_system, snapshot_status, start_rollback
-from pocknix_control.tweaks import save_tweaks
+from pocknix_control.tweaks import patch_tweaks, save_tweaks
 from pocknix_control.updates import check_updates, start_update, update_status
+from pocknix_control.report import collect_report as _collect_report, send_report as _send_report
 
 
 class Plugin:
@@ -66,6 +69,10 @@ class Plugin:
         await asyncio.to_thread(save_tweaks, data)
         return await self.get_config()
 
+    async def patch_tweaks(self, appid, fields):
+        await asyncio.to_thread(patch_tweaks, appid, fields)
+        return await self.get_config()
+
     async def export_config(self, appid, name, basename, allow_overwrite):
         return await asyncio.to_thread(export_config, appid, name, basename, allow_overwrite)
 
@@ -97,6 +104,25 @@ class Plugin:
 
     async def system_status(self):
         return await asyncio.to_thread(system_status)
+
+    # Escritorio: que sabor de Plasma se abre al salir del modo juego. El switch
+    # termina gamescope (y con el este plugin), asi que va desacoplado.
+    async def desktop_flavour(self):
+        return await asyncio.to_thread(desktop_flavour)
+
+    async def set_desktop_flavour(self, name):
+        return await asyncio.to_thread(set_desktop_flavour, name)
+
+    async def switch_to_desktop(self, name):
+        return await asyncio.to_thread(switch_to_desktop, name)
+
+    async def send_report(self, text: str = "", kind: str = "bug", areas=None):
+        # Recoge + redacta + envia al colector propio (calvos-doctor); bloqueante -> hilo.
+        return await asyncio.to_thread(_send_report, text, kind, areas)
+
+    async def collect_report(self, text: str = "", areas=None):
+        # Solo recoge y guarda el tar.gz (calvos-doctor sin --send); bloqueante -> hilo.
+        return await asyncio.to_thread(_collect_report, text, areas)
 
     async def cleanup_scan(self):
         return await asyncio.to_thread(scan)

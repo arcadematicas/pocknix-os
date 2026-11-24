@@ -83,7 +83,7 @@ export function registerQamTab(
     const staticClasses = (DUI as any)?.staticClasses;
     hook.add({
       id: TAB_ID,
-      title: <div className={staticClasses?.Title}>Pocknix Control</div>,
+      title: <div className={staticClasses?.Title}>CalvOS Control</div>,
       content,
       icon,
       __pkcOwner: OWNER,
@@ -143,24 +143,6 @@ export function startQamTabWatchdog(
   };
 
   tick();
-  // Diagnostico (solo los primeros ticks): que hay en window para depurar.
-  let diag = 0;
-  const diagTick = () => {
-    if (cancelled || diag >= 5) return;
-    diag += 1;
-    try {
-      const w = window as any;
-      const hook = w.__TABS_HOOK_INSTANCE;
-      const globals = Object.keys(w).filter((k) => /tab|decky/i.test(k)).slice(0, 12);
-      console.log(
-        `[PocknixControl] qam diag ${diag}: hook=${!!hook} tabs=${hook?.tabs?.length ?? "n/a"} globals=${JSON.stringify(globals)}`,
-      );
-    } catch (e) {
-      console.log("[PocknixControl] qam diag error", String(e));
-    }
-  };
-  diagTick();
-  window.setInterval(diagTick, 2000);
   const interval = window.setInterval(tick, 2000);
 
   return () => {

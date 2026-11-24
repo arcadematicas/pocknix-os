@@ -3,9 +3,9 @@
 # GUEST thunks cross-compile with plain clang against a sysroot assembled from pinned
 # Arch x86_64 + lib32 packages, so the build stays inside the `make packages` chroot.
 pkgname=fex-emu
-# FEX-2611.1 release commit (11/11/2026).
-_commit=4f9c1f1e36443d22d7655477e34f51b95b685bf1
-pkgver=2611.1.4f9c1f1
+# FEX-2611 tag commit (5/11/2026); the clang-23 thunkgen fix from 2610 is already included.
+_commit=8f92e80dccd043e5f9e2cec1be69f5168562eab9
+pkgver=2611.20261105.8f92e80
 pkgrel=1
 pkgdesc="Fast usermode x86/x86-64 emulator for AArch64, built with host+guest thunks"
 arch=('aarch64')

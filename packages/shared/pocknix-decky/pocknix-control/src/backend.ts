@@ -2,11 +2,19 @@ import { call } from "@decky/api";
 import type { Config, ConfigExportResult, ConfigImportResult, ConfigPreview, HdrStatus, LedConfig, LedSideKey, MakoStatus, OledCareStatus, SdcardInfo, ShareStatus, SnapshotStatus, Tweaks, UpdateInfo, UpdateStatus } from "./types";
 
 export const getConfig = () => call<[], Config>("get_config");
+export const sendReport = (text: string, kind: "bug" | "idea", areas: string[]) =>
+  call<[string, string, string[]], { ok: boolean; issue?: string; error?: string; detail?: string }>(
+    "send_report", text, kind, areas);
+export const collectReport = (text: string, areas: string[]) =>
+  call<[string, string[]], { ok: boolean; path?: string; error?: string; detail?: string }>(
+    "collect_report", text, areas);
 export const setFanMode = (mode: string) => call<[string], Config>("set_fan_mode", mode);
 export const setLavdMode = (mode: string) => call<[string], Config>("set_lavd_mode", mode);
 export const setScxScheduler = (scheduler: string) => call<[string], Config>("set_scx_scheduler", scheduler);
 export const setScxMode = (mode: string) => call<[string], Config>("set_scx_mode", mode);
 export const saveTweaks = (data: Tweaks) => call<[Tweaks], Config>("save_tweaks", data);
+export const patchTweaks = (appid: string, fields: Record<string, any>) =>
+  call<[string, Record<string, any>], Config>("patch_tweaks", appid, fields);
 export const exportConfig = (appid: string, name: string, basename: string, allowOverwrite: boolean) =>
   call<[string, string, string, boolean], ConfigExportResult>("export_config", appid, name, basename, allowOverwrite);
 export const configDir = () => call<[], string>("config_dir");
@@ -30,6 +38,12 @@ export interface SystemBacklight { available: boolean; value?: number; max?: num
 export interface SystemStatus { profile: string | null; profiles: { id: string; label: string }[]; battery: SystemBattery; backlight: SystemBacklight }
 
 export const systemStatus = () => call<[], SystemStatus>("system_status");
+
+// Escritorio: sabor de Plasma que se abre al salir del modo juego (plasma |
+// plasma-mobile). El switch cierra Steam, asi que la UI no debe esperar nada mas.
+export const desktopFlavour = () => call<[], string>("desktop_flavour");
+export const setDesktopFlavour = (name: string) => call<[string], string>("set_desktop_flavour", name);
+export const switchToDesktop = (name: string) => call<[string], boolean>("switch_to_desktop", name);
 
 export const cleanupScan = () => call<[], CleanupScan>("cleanup_scan");
 export const cleanupRun = (ids: string[]) => call<[string[]], CleanupResult>("cleanup_run", ids);

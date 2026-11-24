@@ -6,7 +6,7 @@ set -u
 SESSIONS=/usr/share/wayland-sessions
 PICK="${XDG_CONFIG_HOME:-${HOME}/.config}/pocknix/desktop-session"
 PIDFILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pocknix-desktop.pid"
-DEFAULT=plasma-mobile
+DEFAULT=plasma
 
 usage() {
   echo "usage: pocknix-desktop-select [list|current|reset|<name> [--now]]" >&2
@@ -61,13 +61,20 @@ resolve() {
 # pocknix-session's straggler kill in case neither ends it.
 end_session() {
   local pid
-  pid="$(cat "${PIDFILE}" 2>/dev/null)" || return 0
-  kill -0 "${pid}" 2>/dev/null || return 0
-  touch "$(dirname "${PIDFILE}")/pocknix-session.switch"
-  case ":${XDG_CURRENT_DESKTOP:-}:" in
-    *:KDE:*) qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null && return 0 ;;
-  esac
-  kill -TERM "${pid}"
+  pid="$(cat "${PIDFILE}" 2>/dev/null)" || pid=""
+  if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
+    touch "$(dirname "${PIDFILE}")/pocknix-session.switch"
+    case ":${XDG_CURRENT_DESKTOP:-}:" in
+      *:KDE:*) qdbus6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout 2>/dev/null && return 0 ;;
+    esac
+    kill -TERM "${pid}" && return 0
+  fi
+  # pocknix-session does not write the pidfile, so there is nothing to signal: end the session
+  # we can see and let the supervisor respawn with the new pick (its loop re-reads the state).
+  touch "$(dirname "${PIDFILE}")/pocknix-session.switch" 2>/dev/null || true
+  pkill -TERM -f '[s]tartplasma-wayland' 2>/dev/null && return 0
+  pkill -TERM -f '[s]tartplasmamobile' 2>/dev/null && return 0
+  return 0
 }
 
 case "${1:-}" in

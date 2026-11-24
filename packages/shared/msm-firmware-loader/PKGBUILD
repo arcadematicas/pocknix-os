@@ -17,14 +17,15 @@
 # `command -v`); de momento NO se anade a ninguna lista de paquetes (decision pendiente).
 pkgname=msm-firmware-loader
 pkgver=1.8.0
-pkgrel=2
+pkgrel=6
 pkgdesc="Load the ADSP firmware from the Android partitions for hexagonrpcd"
 arch=('any')
 url="https://gitlab.postmarketos.org/postmarketOS/msm-firmware-loader"
 license=('GPL-3.0-only')
 source=("$url/-/archive/$pkgver/msm-firmware-loader-$pkgver.tar.gz"
-        '0001-load-hexagonrpcd-firmware.patch')
-sha256sums=('8ce01de08a789b573c79c0c4a5499157e3cb1c617718aa16902a5784815564cc' 'SKIP')
+        '0001-load-hexagonrpcd-firmware.patch'
+        'hexagonfs-island-off.py' '50-island-off.conf')
+sha256sums=('8ce01de08a789b573c79c0c4a5499157e3cb1c617718aa16902a5784815564cc' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {
   cd msm-firmware-loader-$pkgver
@@ -34,14 +35,23 @@ prepare() {
 package() {
   cd msm-firmware-loader-$pkgver
 
-  # --- scripts -> /usr/sbin (lo que EXIGE el ExecStart de las unidades) -------
-  install -Dm755 msm-firmware-loader.sh        "${pkgdir}/usr/sbin/msm-firmware-loader.sh"
-  install -Dm755 msm-firmware-loader-unpack.sh "${pkgdir}/usr/sbin/msm-firmware-loader-unpack.sh"
+  # --- scripts -> /usr/bin ---------------------------------------------------
+  # Motivo original: el paquete metia la ENTRADA de directorio /usr/sbin/ y pacman abortaba con
+  # "exists in filesystem (owned by filesystem)". Se movieron los scripts a /usr/bin.
+  # OJO (25/10): en la Odin /usr/sbin NO es un symlink a bin, asi que las unidades de upstream
+  # apuntaban a un fichero inexistente y fallaban con 203/EXEC. Se reapuntan mas abajo (sed).
+  install -Dm755 msm-firmware-loader.sh        "${pkgdir}/usr/bin/msm-firmware-loader.sh"
+  install -Dm755 msm-firmware-loader-unpack.sh "${pkgdir}/usr/bin/msm-firmware-loader-unpack.sh"
 
   # --- unidades -> /usr/lib/systemd/system -----------------------------------
   local unit="${pkgdir}/usr/lib/systemd/system"
   install -Dm644 msm-firmware-loader.service        "${unit}/msm-firmware-loader.service"
   install -Dm644 msm-firmware-loader-unpack.service "${unit}/msm-firmware-loader-unpack.service"
+
+  # Las unidades de upstream lanzan /usr/sbin/*.sh; aqui /usr/sbin es un directorio real y los
+  # scripts viven en /usr/bin -> sin esto fallan con status=203/EXEC (visto en 1.8.0-3).
+  sed -i 's|/usr/sbin/msm-firmware-loader|/usr/bin/msm-firmware-loader|g' \
+    "${unit}"/msm-firmware-loader*.service
 
   # --- enable: symlinks del propio paquete (quitarlo los quita) --------------
   # Mismo estilo que pocknix-bsp-sm8750: el link va en <target>.wants/ y apunta a ../<unidad>.
@@ -50,6 +60,12 @@ package() {
   install -d "${unit}/sysinit.target.wants"
   ln -sf "../msm-firmware-loader.service" \
     "${unit}/sysinit.target.wants/msm-firmware-loader.service"
+  # Isla SSC off en el Odin 3 (sensores): helper fail-open + drop-in del servicio.
+  install -Dm755 "${srcdir}/hexagonfs-island-off.py" \
+    "${pkgdir}/usr/lib/pocknix/hexagonfs-island-off.py"
+  install -Dm644 "${srcdir}/50-island-off.conf" \
+    "${pkgdir}/usr/lib/systemd/system/msm-firmware-loader.service.d/50-island-off.conf"
+
   install -d "${unit}/multi-user.target.wants"
   ln -sf "../msm-firmware-loader-unpack.service" \
     "${unit}/multi-user.target.wants/msm-firmware-loader-unpack.service"

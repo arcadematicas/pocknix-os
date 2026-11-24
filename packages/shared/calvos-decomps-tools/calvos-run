@@ -1,0 +1,242 @@
+#!/bin/bash
+# calvos-run v4.2 — lanzador CalvOS para Linux (x86_64/aarch64), AppImage, .sh y .NET
+# - Pasa el lanzador explícito desde calvos-decomps-sync (no adivina).
+# - AppImage x86_64: extracción PERSISTENTE en <juego>/.calimage/<nombre>-<sha>/ (saves y
+#   rutas sobreviven; no usa /tmp, que es RAM). Modo runtime disponible; aarch64 sigue con runtime.
+# - Config por juego en <juego>/.calvos.env (CALVOS_APPIMAGE_MODE, BOX64_*, SDL_*, ...).
+# - .NET: expone el runtime x86_64 de /opt/calvos/dotnet-x86_64 (DOTNET_ROOT + PATH).
+# - Detecta librerías que faltan y, si hay paquete, intenta instalarlas sin preguntar.
+set -uo pipefail
+
+GAMES_DIR="${CALVOS_GAMES_DIR:-/home/games/linux}"
+LOG_DIR="$GAMES_DIR/logs"
+EXTRACT_DIR="$GAMES_DIR/.appimage"
+DOTNET_ROOT_DEFAULT="/opt/calvos/dotnet-x86_64"
+mkdir -p "$LOG_DIR" "$EXTRACT_DIR" 2>/dev/null || true
+
+TARGET="${1:?uso: calvos-run <binario|AppImage|carpeta|.sh> [args...]}"; shift || true
+
+if [ -d "$TARGET" ]; then
+  GAME_DIR="$TARGET"
+  CAND=$(find "$TARGET" -maxdepth 2 -type f \( -iname '*.AppImage' -o -name '*.sh' \) | head -1)
+  [ -n "$CAND" ] || CAND=$(find "$TARGET" -maxdepth 2 -type f -perm -u+x | head -1)
+  if [ -n "$CAND" ]; then TARGET="$CAND"; else echo "No encuentro lanzador en $GAME_DIR"; exit 1; fi
+else
+  GAME_DIR="$(dirname "$TARGET")"
+fi
+
+LOG="$LOG_DIR/$(basename "$GAME_DIR" | tr ' ' '_')-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee -a "$LOG") 2>&1
+echo "[calvos-run] $(date -Is) target=$TARGET dir=$GAME_DIR"
+
+# --- runtime .NET x86_64 (Wario/Links/Symphony/Crash) ----------------------
+if [ -x "$DOTNET_ROOT_DEFAULT/dotnet" ]; then
+  export DOTNET_ROOT="$DOTNET_ROOT_DEFAULT"
+  export PATH="$DOTNET_ROOT:$PATH"
+fi
+export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT="${DOTNET_SYSTEM_GLOBALIZATION_INVARIANT:-1}"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_NOLOGO=1
+
+cd "$GAME_DIR" || exit 1
+
+# --- config por juego: <juego>/.calvos.env ---------------------------------
+if [ -f "$GAME_DIR/.calvos.env" ]; then
+  echo "[calvos-run] cargando $GAME_DIR/.calvos.env"
+  set -a
+  . "$GAME_DIR/.calvos.env"
+  set +a
+fi
+
+# --- detección de librerías que faltan -------------------------------------
+report_missing_libs() {
+  local arch="$1" lib pkg
+  # Box64: "Error loading needed lib libX.so.1" / glibc: "libX.so.1: cannot open shared object file"
+  grep -oE '(Error loading needed lib [^ ]+|lib[A-Za-z0-9_.+-]+\.so(\.[0-9]+)*: cannot open shared object file)' "$LOG" 2>/dev/null \
+    | sed -e 's/^Error loading needed lib //' -e 's/: cannot open shared object file.*//' \
+    | sort -u | while read -r lib; do
+        [ -n "$lib" ] || continue
+        if [ "$arch" = "aarch64" ]; then
+          pkg=$(pacman -Fq "$lib" 2>/dev/null | sort -u | head -1 | cut -d/ -f1)
+          if [ -n "$pkg" ]; then
+            echo "[calvos-libs] falta $lib (paquete: $pkg) — intentando instalar"
+            if sudo -n pacman -S --noconfirm --needed "$pkg" >/dev/null 2>&1; then
+              echo "[calvos-libs] instalado $pkg"
+            else
+              echo "[calvos-libs] no se pudo instalar sin contraseña; ejecuta: sudo pacman -S $pkg"
+            fi
+          else
+            echo "[calvos-libs] falta $lib — sin paquete aarch64 que lo aporte"
+          fi
+        else
+          echo "[calvos-libs] falta $lib (x86_64) — no hay paquete aarch64; busca la .so x86_64 del port"
+        fi
+      done
+}
+
+case "$TARGET" in
+  *.sh)
+    "$TARGET" "$@"; rc=$?
+    if [ "$rc" -eq 139 ]; then
+      echo "[calvos-run] SIGSEGV (139) en el .sh; reintento con BOX64_DYNAREC_BIGBLOCK=0"
+      BOX64_DYNAREC_BIGBLOCK=0 "$TARGET" "$@"; rc=$?
+    fi
+    exit "$rc"
+    ;;
+esac
+
+arch_of() { readelf -h "$1" 2>/dev/null | awk -F: '/Machine/{gsub(/^ +/,"",$2); print $2}' | head -1 || true; }
+
+CALVOS_X86_LIBS="${CALVOS_X86_LIBS:-$GAMES_DIR/libs.x86_64}"
+CALVOS_X86_SYS_LIBS="/opt/calvos/x86_64/lib"
+
+run_x86() { # $1 = binario, resto args
+  local bin="$1"; shift
+  # Librerias x86_64 compartidas entre ports (abseil, etc.): paquete + carpeta de juegos
+  local extra=""
+  [ -d "$CALVOS_X86_SYS_LIBS" ] && extra="$CALVOS_X86_SYS_LIBS"
+  [ -d "$CALVOS_X86_LIBS" ] && extra="${extra:+$extra:}$CALVOS_X86_LIBS"
+  [ -n "$extra" ] && export BOX64_LD_LIBRARY_PATH="$extra${BOX64_LD_LIBRARY_PATH:+:$BOX64_LD_LIBRARY_PATH}"
+  export BOX64_DYNAREC_BIGBLOCK="${BOX64_DYNAREC_BIGBLOCK:-2}"
+  export BOX64_DYNAREC_SAFEFLAGS="${BOX64_DYNAREC_SAFEFLAGS:-1}"
+  export BOX64_DYNAREC_FASTNAN="${BOX64_DYNAREC_FASTNAN:-1}"
+  box64 "$bin" "$@"
+}
+
+# Si Box64 muere con SIGSEGV (139), reintenta una vez con dynarec conservador:
+# algunos recompiladores (.NET/LLVM) tropiezan con BIGBLOCK en la 1a compilacion.
+run_x86_retry() {
+  run_x86 "$@"; local rc=$?
+  if [ "$rc" -eq 139 ] && [ "${BOX64_DYNAREC_BIGBLOCK:-2}" != "0" ]; then
+    echo "[calvos-run] SIGSEGV (139) en Box64; reintento con BOX64_DYNAREC_BIGBLOCK=0"
+    BOX64_DYNAREC_BIGBLOCK=0 run_x86 "$@"
+    return $?
+  fi
+  return $rc
+}
+
+# --- AppImage --------------------------------------------------------------
+is_appimage=0
+case "$TARGET" in *.AppImage|*.appimage) is_appimage=1 ;; esac
+
+CALVOS_IMAGE_DIR="${CALVOS_IMAGE_DIR:-$GAME_DIR/.calimage}"
+
+# Extrae el squashfs del AppImage a un directorio persistente.
+extract_image() { # $1=AppImage $2=destino
+  local img="$1" dest="$2" off
+  off=$(run_x86 "$img" --appimage-offset 2>/dev/null | tail -1 || true)
+  [ -n "${off:-}" ] || off=$(grep -aob 'hsqs' "$img" | head -1 | cut -d: -f1 || true)
+  [ -n "${off:-}" ] || return 1
+  rm -rf "$dest"; mkdir -p "$dest" || return 1
+  if unsquashfs -o "$off" -d "$dest" "$img" >/dev/null 2>&1; then
+    return 0
+  fi
+  rm -rf "$dest"
+  return 1
+}
+
+# Ejecuta un AppDir extraido. cwd = carpeta del juego; APPDIR/APPIMAGE/ARGV0/OWD explicitos.
+run_appdir() { # $1=dir, resto args
+  local dir="$1" bin; shift
+  export APPDIR="$dir" APPIMAGE="$TARGET" ARGV0="$TARGET" OWD="$GAME_DIR"
+  # El runtime de AppImage usa <AppImage>.home como HOME portable si existe.
+  if [ -d "${TARGET}.home" ]; then
+    export HOME="${TARGET}.home"
+    echo "[calvos-run] HOME portable: $HOME"
+  fi
+  cd "$GAME_DIR" || return 1
+  if [ -x "$dir/AppRun" ]; then
+    echo "[calvos-run] ejecutando $dir/AppRun (cwd=$GAME_DIR)"
+    if head -c2 "$dir/AppRun" 2>/dev/null | grep -q '#!'; then
+      "$dir/AppRun" "$@"
+    else
+      run_x86_retry "$dir/AppRun" "$@"
+    fi
+    return $?
+  fi
+  bin=$(find "$dir" -maxdepth 3 -type f -perm -u+x | head -1)
+  [ -n "$bin" ] || return 127
+  echo "[calvos-run] ejecutando binario interno $bin"
+  run_x86_retry "$bin" "$@"
+}
+
+run_image_runtime() { # comportamiento antiguo: runtime del AppImage (extrae a /tmp)
+  export APPIMAGE_EXTRACT_AND_RUN=1
+  echo "[calvos-run] AppImage: runtime directo (extract-and-run)"
+  run_x86_retry "$TARGET" "$@"
+}
+
+if [ "$is_appimage" -eq 1 ]; then
+  img_arch=$(arch_of "$TARGET")
+  mode="${CALVOS_APPIMAGE_MODE:-auto}"
+  echo "[calvos-run] AppImage arch=${img_arch:-?} mode=$mode"
+
+  # aarch64: el runtime nativo funciona; no hace falta extraer
+  if [ "$mode" = runtime ] || { [ "$mode" = auto ] && [[ "${img_arch:-}" == *AArch64* ]]; }; then
+    run_image_runtime "$@"; rc=$?
+    [ "$rc" -eq 0 ] && exit 0
+    report_missing_libs x86_64
+    echo "[calvos-run] AppImage runtime falló (rc=$rc); extrayendo con unsquashfs"
+    DEST="$EXTRACT_DIR/$(basename "$TARGET" | sed -E 's/\.(AppImage|appimage)$//')"
+    if extract_image "$TARGET" "$DEST"; then
+      run_appdir "$DEST" "$@"; rc=$?
+      report_missing_libs x86_64
+      exit "$rc"
+    fi
+    echo "[calvos-run] no se pudo extraer/ejecutar el AppImage"
+    exit 1
+  fi
+
+  # x86_64 (y resto): extracción persistente junto al juego
+  name=$(basename "$TARGET"); name=${name%.AppImage}; name=${name%.appimage}
+  sha=$(sha256sum "$TARGET" 2>/dev/null | cut -c1-12)
+  DEST="$CALVOS_IMAGE_DIR/${name}-${sha:-x}"
+  if [ ! -x "$DEST/AppRun" ] || [ ! -f "$DEST/.calvos-image-ok" ]; then
+    echo "[calvos-run] extrayendo AppImage en $DEST"
+    if extract_image "$TARGET" "$DEST"; then
+      : > "$DEST/.calvos-image-ok"
+    else
+      echo "[calvos-run] extracción fallida; usando runtime directo"
+      run_image_runtime "$@"; rc=$?
+      report_missing_libs x86_64
+      exit "$rc"
+    fi
+  else
+    echo "[calvos-run] usando extracción existente $DEST"
+  fi
+
+  run_appdir "$DEST" "$@"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    report_missing_libs x86_64
+    echo "[calvos-run] AppRun persistente falló (rc=$rc); probando runtime directo"
+    run_image_runtime "$@"; rc=$?
+  fi
+  report_missing_libs x86_64
+  exit "$rc"
+fi
+
+# --- binario nativo --------------------------------------------------------
+ARCH=$(arch_of "$TARGET")
+echo "[calvos-run] arch=$ARCH"
+for L in "$GAME_DIR/libs.x86_64" "$GAME_DIR/libs" "$GAME_DIR/lib"; do
+  [ -d "$L" ] && export BOX64_LD_LIBRARY_PATH="$L:${BOX64_LD_LIBRARY_PATH:-}"
+done
+
+case "$ARCH" in
+  *AArch64*)
+    "$TARGET" "$@"
+    rc=$?
+    report_missing_libs aarch64
+    exit "$rc"
+    ;;
+  *X86-64*)
+    run_x86_retry "$TARGET" "$@"
+    rc=$?
+    report_missing_libs x86_64
+    exit "$rc"
+    ;;
+  *)
+    "$TARGET" "$@"
+    exit $?
+    ;;
+esac

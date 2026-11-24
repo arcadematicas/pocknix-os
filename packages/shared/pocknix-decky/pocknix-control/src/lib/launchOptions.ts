@@ -92,3 +92,46 @@ export async function syncMakoLaunchOption(appid: string, enabled: boolean): Pro
   }
   if (next !== current.trim()) apps.SetAppLaunchOptions(Number(appid), next);
 }
+
+// Native games have no Proton wrapper, so a per-game Mesa pick would never reach them. The
+// generic wrapper reads SteamAppId -> /etc/pocknix/game-tweaks.json at launch and exports the
+// chosen ICD; putting it in the launch options once is enough, and later version changes in
+// the panel apply without touching Steam again. Same channel and token discipline as MAKO:
+// only our token is rewritten, everything else in the string survives.
+const GAME_WRAPPER = "/usr/lib/pocknix/pocknix-game-wrapper";
+const GAME_WRAPPER_TOKEN = /\/usr\/lib\/pocknix\/pocknix-game-wrapper\s*/g;
+const GAME_WRAPPER_PRESENT = /\/usr\/lib\/pocknix\/pocknix-game-wrapper/;
+
+/** true when this game already launches through the native Mesa wrapper. */
+export function gameWrapperEnabledIn(current: string): boolean {
+  return GAME_WRAPPER_PRESENT.test(current);
+}
+
+
+// Non-Steam shortcuts (our appids: 10 digits) only persist through SetShortcutLaunchOptions;
+// SetAppLaunchOptions exists for store titles and silently does nothing for them. Prefer the
+// shortcut call and fall back for store titles.
+type LaunchSetter = (appid: number, value: string) => void;
+function launchSetter(apps: any): LaunchSetter | null {
+  const fn = apps?.SetShortcutLaunchOptions ?? apps?.SetAppLaunchOptions;
+  return typeof fn === "function" ? (fn as LaunchSetter).bind(apps) : null;
+}
+
+/** Add or remove the native Mesa wrapper, preserving every other launch-option token. */
+export async function syncGameWrapperLaunchOption(appid: string, enabled: boolean): Promise<void> {
+  const apps = window.SteamClient?.Apps;
+  const set = launchSetter(apps);
+  if (!set) return;
+  const current = await getLaunchOptions(appid);
+  if (current === null) return;
+  const stripped = current.replace(GAME_WRAPPER_TOKEN, "").trim();
+  let next: string;
+  if (enabled) {
+    next = stripped.includes("%command%")
+      ? stripped.replace("%command%", `${GAME_WRAPPER} %command%`)
+      : [stripped, `${GAME_WRAPPER} %command%`].filter(Boolean).join(" ");
+  } else {
+    next = stripped === "%command%" ? "" : stripped;
+  }
+  if (next !== current.trim()) set(Number(appid), next);
+}
