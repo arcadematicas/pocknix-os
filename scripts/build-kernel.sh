@@ -70,8 +70,7 @@ apply_patches() {
     for p in "${d}"*.patch; do
       [ -f "${p}" ] || continue
       if ! patch -p1 --fuzz=5 -d "${KSRC}" < "${p}" >/dev/null 2>&1; then
-        warn "patch conflict (skipping): $(basename "${p}")"
-        continue
+        die "patch conflict: $(basename "${p}")"
       fi
       n=$((n+1))
     done

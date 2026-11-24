@@ -26,5 +26,11 @@ Include = /etc/pacman.d/mirrorlist
 [alarm]
 Include = /etc/pacman.d/mirrorlist
 
-[aur]
-Include = /etc/pacman.d/mirrorlist
+
+[pocknix]
+Server = https://pub-fd47305874674bf597b27eb7f880e73b.r2.dev/sm8750
+SigLevel = Required
+
+[pocknix-shared]
+Server = https://pub-fd47305874674bf597b27eb7f880e73b.r2.dev/shared
+SigLevel = Required

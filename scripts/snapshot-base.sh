@@ -101,6 +101,24 @@ log "union manifest: ${#want[@]} ALARM packages"
 # The union covers every SoC's BUILD chroot but only ONE runtime rootfs, so a
 # runtime-only dep of another SoC's BSP silently misses the snapshot and that
 # SoC's images then fail to resolve. Fail rather than ship a one-SoC base.
+#
+# 17/11/2026 — este guard solo miraba `want` (ALARM) POR NOMBRE, y con los BSP de
+# hoy saltaba siempre por dos motivos legitimos (el guard de capas de mas abajo ya
+# los resolvia; este se quedo atras):
+#   * deps que son NUESTRAS (hexagonrpc, libssc, pd-mapper, msm-firmware-loader,
+#     calvos-*): viven en [pocknix]/[pocknix-shared], no en la base, y `want` las
+#     excluye a proposito -> nunca podian estar ahi.
+#   * deps satisfechas por un PROVIDES (sdl2 <- sdl2-compat): el nombre no aparece.
+# Ninguna falta en un dispositivo: los dos repos se sirven siempre. Se resuelven
+# aqui (ours + %PROVIDES% de los local dbs cosechados) y el guard sigue fallando
+# SOLO cuando la dep no esta en ningun sitio.
+declare -A provided
+for _src in "${sources[@]}"; do
+  while IFS= read -r _t; do
+    _t="${_t%%[<>=]*}"
+    [ -n "${_t}" ] && provided["${_t}"]=1
+  done < <(awk '/^%PROVIDES%$/{f=1;next} /^%[A-Z]+%$/{f=0} f&&NF' "${_src}"/var/lib/pacman/local/*/desc 2>/dev/null)
+done
 soc_missing=""
 for _bsp in "${POCKNIX_ROOT}"/devices/*/packages/pocknix-bsp-*/PKGBUILD; do
   [ -f "${_bsp}" ] || continue
@@ -112,7 +130,9 @@ for _bsp in "${POCKNIX_ROOT}"/devices/*/packages/pocknix-bsp-*/PKGBUILD; do
   while read -r _dep; do
     _dep="${_dep%%[<>=]*}"
     case "${_dep}" in ''|pocknix-*) continue ;; esac
-    [ -n "${want[${_dep}]:-}" ] && continue
+    if [ -n "${want[${_dep}]:-}" ] || [ -n "${ours[${_dep}]:-}" ] || [ -n "${provided[${_dep}]:-}" ]; then
+      continue
+    fi
     soc_missing+="  ${_dep} (needed by $(basename "$(dirname "${_bsp}")"))"$'\n'
   done <<< "${_deps}"
 done

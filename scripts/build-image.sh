@@ -114,8 +114,8 @@ install_local_packages() {
   local gs_ver; gs_ver="$(chroot "${root}" pacman -Q gamescope 2>/dev/null | awk '{print $2}')"
   case "${gs_ver}" in
     1:*rocknix*) log "gamescope OK: ${gs_ver} (epoch-1 rocknix patched build)" ;;
-    1:*ogc1*)    log "gamescope OK: ${gs_ver} (epoch-1 OGC base ogc1: NUESTRO fork, rotacion nativa + HDR/QAM)" ;;
     1:*ogc2*)    log "gamescope OK: ${gs_ver} (epoch-1 OGC base: rotation native + armada HDR)" ;;
+        1:*ogc1*)    log "gamescope OK: ${gs_ver} (epoch-1 OGC ogc1 + armada HDR, fork calvOS)" ;;
     *) die "gamescope resolved to '${gs_ver}', NOT one of our epoch-1 [pocknix] builds (rocknix or OGC). Vanilla gamescope can't drive the RP6's rotated panel (no --use-rotation-shader) -> black screen. The install pins pocknix/gamescope, so reaching here means [pocknix] is missing it: confirm build/localrepo/gamescope-1:*.pkg.tar.* exists AND is registered in pocknix.db ('make packages PKG=gamescope' rebuilds + repo-adds it), then re-run." ;;
   esac
   local lp
@@ -186,7 +186,8 @@ install_local_packages() {
   # pins the device identity and pulls the BSP + the kernel package (already present).
   local -a _pkgs=()
   local _p
-  while read -r _p; do _pkgs+=("pocknix/${_p}"); done \
+      # sin prefijo: pacman busca en [pocknix] y [pocknix-shared]
+      while read -r _p; do _pkgs+=("${_p}"); done \
     < <(read_pkglist "${DEVICE_DIR}/packages.list")
   chroot "${root}" pacman -S --noconfirm --needed "${_pkgs[@]}"
   chroot "${root}" pacman -Q "${DEVICE_BSP_PKG}" >/dev/null 2>&1 || {
